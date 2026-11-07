@@ -96,9 +96,17 @@ a.listings {
   border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; color: var(--link); background: var(--bg);
 }
 a.listings:hover { border-color: var(--link); }
+.override { display: inline-flex; align-items: center; gap: 2px; font-family: var(--mono); }
+.override input {
+  width: 6.5em; font: 16px var(--mono); text-align: right; padding: 6px 8px; color: var(--fg);
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px; font-variant-numeric: tabular-nums;
+}
+.override input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+.override input.set { border-color: var(--good); background: var(--surface); }
+.mine { font-family: var(--mono); font-size: .72rem; color: var(--good); margin-top: 2px; }
 footer { color: var(--muted); font-size: .85rem; max-width: 80ch; }
 
-@media (min-width: 761px) { table { min-width: 900px; } }
+@media (min-width: 761px) { table { min-width: 980px; } }
 /* Phones: each row becomes a stacked card. */
 @media (max-width: 760px) {
   h1 { font-size: 2rem; } .total b { font-size: 1.6rem; }
@@ -135,7 +143,7 @@ Squirtle 63/102 HP</textarea>
   </section>
 
   <section class="totals" aria-live="polite">
-    <div class="total"><span class="cap">TCGplayer NM total</span><b id="t-usd">—</b></div>
+    <div class="total"><span class="cap">Total</span><b id="t-usd">—</b></div>
     <div class="total"><span class="cap">Cards</span><b id="t-count">—</b></div>
     <div class="status" id="status">Press “Look up values” to price the list.</div>
   </section>
@@ -144,13 +152,13 @@ Squirtle 63/102 HP</textarea>
     <table>
       <thead><tr>
         <th>Card</th><th>Match</th><th>Condition</th><th>Listings</th><th class="num">Qty</th>
-        <th class="num">TCGplayer NM (USD)</th><th class="num">Total (USD)</th>
+        <th class="num">TCGplayer NM</th><th class="num">Override</th><th class="num">Total</th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
   </div>
 
-  <footer>Prices are for raw, near-mint cards: TCGplayer’s market price (recent sales), refreshed daily through the free TCGdex API. For played cards, the listings link opens TCGplayer filtered to that condition, printing and English, so you can see what they’re actually selling for. Change a card’s condition or printing in the table and its link updates.</footer>
+  <footer>Prices are for raw, near-mint cards: TCGplayer’s market price (recent sales), refreshed daily through the free TCGdex API. For played cards, the listings link opens TCGplayer filtered to that condition, printing and English, so you can see what they’re actually selling for. Change a card’s condition or printing in the table and its link updates. Put what you found into “Your price” and it replaces the near-mint price in the totals. Your list, lookups and prices are saved in this browser, so they’re still here after a refresh.</footer>
 </main>
 
 <script>
@@ -255,14 +263,52 @@ function listingsURL(card, cond) {
 }
 
 let results = [];
+let savedAt = null;   // when the shown lookup was made, if it was restored from a save
+
+/* ---------- your prices ---------- */
+// Keyed by the card (its exact printing) and condition: an LP price stays with LP, and it
+// comes back if the card is looked up again or the list is reordered.
+let overrides = store.get("bvc-overrides", {});
+const overrideKey = (r) => `${r.matches[r.choice].id}|${r.entry.cond}`;
+const overrideFor = (r) => overrides[overrideKey(r)] ?? null;
+function parsePrice(text) {
+  const n = parseFloat(String(text).replace(/[$,\s]/g, ""));
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+}
+// What a row is worth each: your price if you set one, else the near-mint market price.
+function unitValue(r) {
+  const mine = overrideFor(r);
+  return mine != null ? mine : prices(r.matches[r.choice]).usd;
+}
+
+/* ---------- saving ---------- */
+// Only what the table needs from each card (the full TCGdex record is much bigger).
+const slim = (c) => ({
+  id: c.id, name: c.name, localId: c.localId, rarity: c.rarity, image: c.image,
+  set: { name: c.set?.name, cardCount: { official: c.set?.cardCount?.official } },
+  pricing: { tcgplayer: c.pricing?.tcgplayer },
+});
+function save() {
+  if (results.some((r) => r.pending)) return;
+  store.set("bvc-results", {
+    savedAt: savedAt || new Date().toISOString(),
+    results: results.map((r) => ({ entry: r.entry, error: r.error, note: r.note, choice: r.choice, matches: r.matches?.map(slim) })),
+  });
+}
+
+function rowTotal(r) {
+  const v = unitValue(r);
+  return v != null ? v * r.entry.qty : null;
+}
 
 function render() {
   const rows = results.map((r, i) => {
-    if (r.pending) return `<tr><td class="wide" colspan="7"><span class="input-line">${esc(r.entry?.raw ?? "")}</span> — looking up…</td></tr>`;
-    if (r.error) return `<tr><td class="wide"><div class="input-line">${esc(r.entry.raw)}</div></td><td class="wide" colspan="6"><span class="pill bad">Not found</span>${typeof r.error === "string" ? `<div class="hint">${esc(r.error)}</div>` : ""}</td></tr>`;
+    if (r.pending) return `<tr><td class="wide" colspan="8"><span class="input-line">${esc(r.entry?.raw ?? "")}</span> — looking up…</td></tr>`;
+    if (r.error) return `<tr><td class="wide"><div class="input-line">${esc(r.entry.raw)}</div></td><td class="wide" colspan="7"><span class="pill bad">Not found</span>${typeof r.error === "string" ? `<div class="hint">${esc(r.error)}</div>` : ""}</td></tr>`;
     const c = r.matches[r.choice];
     const p = prices(c);
-    const line = p.usd != null ? p.usd * r.entry.qty : null;
+    const mine = overrideFor(r);
+    const line = rowTotal(r);
     const pill = r.note ? `<span class="pill warn">Check</span>` : r.matches.length > 1 ? `<span class="pill warn">${r.matches.length} printings</span>` : `<span class="pill ok">Matched</span>`;
     const chooser = r.matches.length > 1 ? `<select class="printing" id="pick-${i}" data-i="${i}" aria-label="Choose printing">${r.matches.map((m, j) =>
       `<option value="${j}" ${j === r.choice ? "selected" : ""}>${esc(m.set?.name)} · ${esc(m.localId)}/${esc(m.set?.cardCount?.official)}</option>`).join("")}</select>` : "";
@@ -278,33 +324,63 @@ function render() {
       <td data-label="Condition">${condSel}</td>
       <td data-label="Listings">${link}</td>
       <td class="num" data-label="Qty">${r.entry.qty}</td>
-      <td class="num" data-label="TCGplayer NM (USD)"><b>${p.usd != null ? usd.format(p.usd) : "—"}</b>${p.variant ? `<div class="variants">${esc(p.variant)}</div>` : ""}${p.others.map((o) => `<div class="variants">${esc(o.label)} ${usd.format(o.usd)}</div>`).join("")}</td>
-      <td class="num" data-label="Total (USD)"><b>${line != null ? usd.format(line) : "—"}</b></td>
+      <td class="num" data-label="TCGplayer NM"><b>${p.usd != null ? usd.format(p.usd) : "—"}</b>${p.variant ? `<div class="variants">${esc(p.variant)}</div>` : ""}${p.others.map((o) => `<div class="variants">${esc(o.label)} ${usd.format(o.usd)}</div>`).join("")}</td>
+      <td class="num" data-label="Your price"><label class="override">$<input id="ov-${i}" data-ov="${i}" type="text" inputmode="decimal" autocomplete="off" placeholder="—" value="${mine != null ? mine.toFixed(2) : ""}" class="${mine != null ? "set" : ""}" aria-label="Your price for ${esc(c.name)} in ${esc(CONDITION_NAME[r.entry.cond])}"></label></td>
+      <td class="num" data-label="Total" id="total-${i}">${totalCell(r)}</td>
     </tr>`;
   });
   $("rows").innerHTML = rows.join("");
+  updateSummary();
+}
 
+function totalCell(r) {
+  const line = rowTotal(r);
+  return `<b>${line != null ? usd.format(line) : "—"}</b>${overrideFor(r) != null ? `<div class="mine">your price</div>` : ""}`;
+}
+
+// Totals and the status line (also run on each keystroke in a price box, without redrawing rows).
+function updateSummary() {
   let tUsd = 0, n = 0, found = 0;
   for (const r of results) {
     if (!r.matches?.length) continue;
-    const p = prices(r.matches[r.choice]);
-    tUsd += (p.usd || 0) * r.entry.qty; n += r.entry.qty; found++;
+    tUsd += rowTotal(r) || 0; n += r.entry.qty; found++;
   }
   const done = results.filter((r) => !r.pending).length;
   $("t-usd").textContent = found ? usd.format(tUsd) : "—";
   $("t-count").textContent = found ? n : "—";
   const missing = results.filter((r) => r.error).length;
-  const played = results.filter((r) => r.matches?.length && r.entry.cond !== "NM").length;
+  const mine = results.filter((r) => r.matches?.length && overrideFor(r) != null).length;
+  const playedNM = results.filter((r) => r.matches?.length && r.entry.cond !== "NM" && overrideFor(r) == null).length;
+  const when = savedAt ? new Date(savedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : null;
   $("status").textContent = done < results.length ? `Looking up ${done + 1} of ${results.length}…`
-    : results.length ? `${found} of ${results.length} lines priced${missing ? ` · ${missing} not found` : ""}${played ? ` · ${played} played: totals are NM, check their listings` : ""}.`
+    : results.length ? [
+        `${found} of ${results.length} lines priced`,
+        missing ? `${missing} not found` : "",
+        mine ? `${mine} with your price` : "",
+        playedNM ? `${playedNM} played without your price (counted at NM)` : "",
+        when ? `market prices from ${when}` : "",
+      ].filter(Boolean).join(" · ") + "."
     : "Press “Look up values” to price the list.";
   $("copy").disabled = !found || done < results.length;
 }
 
 document.addEventListener("change", (e) => {
   const t = e.target;
-  if (t.matches("select[data-i]")) { results[+t.dataset.i].choice = +t.value; render(); }
-  if (t.matches("select[data-cond]")) { results[+t.dataset.cond].entry.cond = t.value; render(); }
+  if (t.matches("select[data-i]")) { results[+t.dataset.i].choice = +t.value; render(); save(); }
+  if (t.matches("select[data-cond]")) { results[+t.dataset.cond].entry.cond = t.value; render(); save(); }
+  if (t.matches("input[data-ov]") && overrideFor(results[+t.dataset.ov]) != null) t.value = overrideFor(results[+t.dataset.ov]).toFixed(2);
+});
+// Typing a price: saved and totalled as you type; the row isn't redrawn, so the box keeps focus.
+document.addEventListener("input", (e) => {
+  const t = e.target;
+  if (!t.matches("input[data-ov]")) return;
+  const r = results[+t.dataset.ov];
+  const v = parsePrice(t.value);
+  if (v == null) delete overrides[overrideKey(r)]; else overrides[overrideKey(r)] = v;
+  store.set("bvc-overrides", overrides);
+  t.classList.toggle("set", v != null);
+  $(`total-${t.dataset.ov}`).innerHTML = totalCell(r);
+  updateSummary();
 });
 $("cards").addEventListener("input", () => store.set("bvc-list", $("cards").value));
 
@@ -312,6 +388,7 @@ async function run() {
   store.set("bvc-list", $("cards").value);
   const entries = $("cards").value.split("\n").map(parseLine).filter(Boolean);
   results = entries.map((entry) => entry.error ? { entry, error: entry.error } : { entry, pending: true });
+  savedAt = null;
   render();
   $("go").disabled = true;
   let next = 0;
@@ -332,16 +409,17 @@ async function run() {
   await Promise.all([worker(), worker(), worker(), worker()]);
   $("go").disabled = false;
   render();
+  save();
 }
 
 function toCSV() {
   const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-  const lines = [["Input", "Card", "Set", "Number", "Rarity", "Condition", "Qty", "TCGplayer NM USD", "Total USD (NM)", "TCGplayer listings"].map(q).join(",")];
+  const lines = [["Input", "Card", "Set", "Number", "Rarity", "Condition", "Qty", "TCGplayer NM USD", "Your price USD", "Total USD", "TCGplayer listings"].map(q).join(",")];
   for (const r of results) {
-    if (!r.matches?.length) { lines.push([r.entry.raw, "NOT FOUND", "", "", "", r.entry.cond, r.entry.qty, "", "", ""].map(q).join(",")); continue; }
-    const c = r.matches[r.choice], p = prices(c);
+    if (!r.matches?.length) { lines.push([r.entry.raw, "NOT FOUND", "", "", "", r.entry.cond, r.entry.qty, "", "", "", ""].map(q).join(",")); continue; }
+    const c = r.matches[r.choice], p = prices(c), mine = overrideFor(r), line = rowTotal(r);
     lines.push([r.entry.raw, c.name, c.set?.name, `${c.localId}/${c.set?.cardCount?.official ?? ""}`, c.rarity, r.entry.cond, r.entry.qty,
-      p.usd?.toFixed(2), p.usd != null ? (p.usd * r.entry.qty).toFixed(2) : "", listingsURL(c, r.entry.cond)].map(q).join(","));
+      p.usd?.toFixed(2), mine?.toFixed(2), line?.toFixed(2), listingsURL(c, r.entry.cond)].map(q).join(","));
   }
   return lines.join("\n");
 }
@@ -361,6 +439,12 @@ $("copy").addEventListener("click", async () => {
 
 const saved = store.get("bvc-list", null);
 if (saved) $("cards").value = saved;
+// The last lookup, as it was left (printings, conditions); prices are from when it was made.
+const last = store.get("bvc-results", null);
+if (last?.results?.length) {
+  results = last.results.map((r) => r.matches?.length ? { entry: r.entry, matches: r.matches, choice: r.choice ?? 0, note: r.note } : { entry: r.entry, error: r.error ?? true });
+  savedAt = last.savedAt;
+}
 render();
 </script>
 </body>
