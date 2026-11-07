@@ -104,7 +104,7 @@ a.listings:hover { border-color: var(--link); }
 .override input:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
 .override input.set { border-color: var(--good); background: var(--surface); }
 .mine { font-family: var(--mono); font-size: .72rem; color: var(--good); margin-top: 2px; }
-footer { color: var(--muted); font-size: .85rem; max-width: 80ch; }
+footer { color: var(--muted); font-size: .85rem; }
 
 @media (min-width: 761px) { table { min-width: 980px; } }
 /* Phones: each row becomes a stacked card. */
@@ -152,7 +152,7 @@ Squirtle 63/102 HP</textarea>
     <table>
       <thead><tr>
         <th>Card</th><th>Match</th><th>Condition</th><th>Listings</th><th class="num">Qty</th>
-        <th class="num">TCGplayer NM</th><th class="num">Override</th><th class="num">Total</th>
+        <th class="num">TCGplayer NM (USD)</th><th class="num">Your price</th><th class="num">Total (USD)</th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -324,9 +324,9 @@ function render() {
       <td data-label="Condition">${condSel}</td>
       <td data-label="Listings">${link}</td>
       <td class="num" data-label="Qty">${r.entry.qty}</td>
-      <td class="num" data-label="TCGplayer NM"><b>${p.usd != null ? usd.format(p.usd) : "—"}</b>${p.variant ? `<div class="variants">${esc(p.variant)}</div>` : ""}${p.others.map((o) => `<div class="variants">${esc(o.label)} ${usd.format(o.usd)}</div>`).join("")}</td>
+      <td class="num" data-label="TCGplayer NM (USD)"><b>${p.usd != null ? usd.format(p.usd) : "—"}</b>${p.variant ? `<div class="variants">${esc(p.variant)}</div>` : ""}${p.others.map((o) => `<div class="variants">${esc(o.label)} ${usd.format(o.usd)}</div>`).join("")}</td>
       <td class="num" data-label="Your price"><label class="override">$<input id="ov-${i}" data-ov="${i}" type="text" inputmode="decimal" autocomplete="off" placeholder="—" value="${mine != null ? mine.toFixed(2) : ""}" class="${mine != null ? "set" : ""}" aria-label="Your price for ${esc(c.name)} in ${esc(CONDITION_NAME[r.entry.cond])}"></label></td>
-      <td class="num" data-label="Total" id="total-${i}">${totalCell(r)}</td>
+      <td class="num" data-label="Total (USD)" id="total-${i}">${totalCell(r)}</td>
     </tr>`;
   });
   $("rows").innerHTML = rows.join("");
