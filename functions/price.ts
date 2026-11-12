@@ -1,10 +1,12 @@
 // Cloudflare Pages Function: this file's path makes it answer GET /price.
 // The page itself is the static file public/index.html, served at /.
 
+import type { PriceReply } from "../shared/api";
+
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/11";
 
-async function fetchMarketPrice(productId: string, condition: string) {
+async function fetchMarketPrice(productId: string, condition: string): Promise<PriceReply> {
   // e.g. https://mp-search-api.tcgplayer.com/v2/product/84199/details
   const response = await fetch(
     `https://mp-search-api.tcgplayer.com/v2/product/${encodeURIComponent(productId)}/details?includeSkus=true`,

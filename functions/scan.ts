@@ -7,6 +7,8 @@
 // AI on the Pages project (Settings > Bindings). If a SCAN_PASSCODE
 // variable is set on the project, requests must send the same passcode.
 
+import type { ScanReply, ScannedCard } from "../shared/api";
+
 const MODEL = "@cf/mistralai/mistral-small-3.1-24b-instruct";
 
 // ~1.5 MB of base64 is plenty for a 1280px JPEG; reject anything bigger.
@@ -22,8 +24,6 @@ Reply with JSON only, no other text, in exactly this shape:
 {"cards":[{"name":"...","number":"...","total":"..."}]}
 If there are no Pokémon cards in the photo, reply {"cards":[]}.`;
 
-type Card = { name: string; number: string; total: string };
-
 interface Env {
   AI: { run(model: string, input: unknown): Promise<unknown> };
   SCAN_PASSCODE?: string;
@@ -35,7 +35,7 @@ const str = (v: unknown) => (typeof v === "string" ? v.trim() : typeof v === "nu
 
 // The model replies with text that should be JSON, but small models sometimes
 // wrap it in ``` fences or add a sentence. Take the outermost {...}.
-function parseCards(reply: unknown): Card[] | null {
+function parseCards(reply: unknown): ScannedCard[] | null {
   let data: unknown = reply;
   if (typeof reply === "string") {
     const start = reply.indexOf("{");
@@ -100,5 +100,5 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: E
     return text(`Couldn't understand the card reader's reply: ${shown}`, 502);
   }
 
-  return Response.json({ cards });
+  return Response.json({ cards } satisfies ScanReply);
 };

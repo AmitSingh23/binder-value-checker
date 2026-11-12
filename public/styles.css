@@ -1,0 +1,662 @@
+/*
+ * Styles for index.html.
+ *
+ * Layout: one working column.
+ *   1. The card list (textarea) and buttons
+ *   2. Totals
+ *   3. Priced table (turns into stacked cards on phones)
+ * Plus a full-screen camera view for scanning cards.
+ */
+
+/* ================================================================
+   Theme
+   ================================================================ */
+
+:root {
+  --bg:         #f3f4f7;
+  --surface:    #ffffff;
+  --fg:         #1b2030;
+  --muted:      #5f6678;
+  --line:       #d9dce5;
+  --accent:     #f2c230;   /* card-border yellow */
+  --accent-ink: #2a2310;
+  --link:       #2c5bd6;
+  --good:       #1f8a4c;
+  --warn:       #a8660b;
+  --bad:        #c0392b;
+  --title-a:    #e8890c;
+  --title-b:    #e2483d;
+
+  --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --body:    "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:    "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+
+/* Dark colors. Repeated twice because CSS can't share a block between
+   "system is dark" and "page forced to dark". Keep the two in sync. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:         #12151d;
+    --surface:    #1a1f2a;
+    --fg:         #e8eaf0;
+    --muted:      #9aa1b2;
+    --line:       #2c3342;
+    --accent:     #f2c230;
+    --accent-ink: #1b1608;
+    --link:       #8fb0ff;
+    --good:       #4cc47f;
+    --warn:       #e3a54a;
+    --bad:        #ef7466;
+    --title-a:    #ffd23f;
+    --title-b:    #ff7a45;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg:         #12151d;
+  --surface:    #1a1f2a;
+  --fg:         #e8eaf0;
+  --muted:      #9aa1b2;
+  --line:       #2c3342;
+  --accent:     #f2c230;
+  --accent-ink: #1b1608;
+  --link:       #8fb0ff;
+  --good:       #4cc47f;
+  --warn:       #e3a54a;
+  --bad:        #ef7466;
+  --title-a:    #ffd23f;
+  --title-b:    #ff7a45;
+  color-scheme: dark;
+}
+
+/* ================================================================
+   Page
+   ================================================================ */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.5 var(--body);
+  /* Respect the iPhone notch / home-bar areas. */
+  padding-left:  max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(32px, env(safe-area-inset-top, 0px)) 64px;
+}
+
+main {
+  max-width: 1080px;
+  margin: 0 auto;
+  display: grid;
+  gap: 24px;
+}
+
+h1 {
+  font: 700 2.3rem/1.05 "Fredoka", var(--body);
+  letter-spacing: -.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+h1 span {
+  background: linear-gradient(100deg, var(--title-a), var(--title-b));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Header layout */
+header {
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 24px 28px 20px;
+}
+
+.logo-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.logo {
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+/* Holo-card sticker: white border, dark ink outline, foil sheen */
+.logo-card {
+  transform-box: fill-box;
+  filter: drop-shadow(0 4px 6px rgb(0 0 0 / .22));
+  transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
+}
+.logo-sticker { stroke: #fff; stroke-width: 7; stroke-linejoin: round; }
+.logo-ink     { stroke: #1b2030; }
+.logo-bolt {
+  fill: #fff;
+  stroke: #1b2030;
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+}
+.logo-sheen {
+  fill: #fff;
+  opacity: .5;
+  transform: translateX(-30px);
+}
+.logo-spark       { fill: var(--accent); stroke: #1b2030; stroke-width: 1.1; stroke-linejoin: round; }
+.logo-spark.small { fill: #7ff3ff; }
+
+/* Hovering the header tilts the card and sweeps the foil shine across it */
+header:hover .logo-sheen {
+  transform: translateX(40px);
+  transition: transform .8s ease;
+}
+header:hover .logo-spark { animation: twinkle .9s ease-in-out; transform-origin: center; transform-box: fill-box; }
+@keyframes twinkle {
+  50% { transform: scale(1.35) rotate(20deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  header:hover .logo-sheen, header:hover .logo-spark { transition: none; animation: none; }
+}
+
+.title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;   /* lets title shrink on narrow screens */
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 .78rem/1 var(--body);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 5px 10px 5px 8px;
+  border-radius: 999px;
+  width: fit-content;
+}
+.badge i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--good);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent);
+  animation: live-ping 2s ease-out infinite;
+}
+@keyframes live-ping {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .badge i { animation: none; }
+}
+
+.lede {
+  color: var(--muted);
+  margin: 0;
+  max-width: 62ch;
+}
+
+/* Small all-caps label */
+.cap {
+  font: 600 .78rem/1 var(--body);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+}
+
+.hint      { color: var(--muted); font-size: .9rem; }
+.hint code { font-family: var(--mono); font-size: .85em; }
+
+a { color: var(--link); }
+
+footer { color: var(--muted); font-size: .85rem; }
+
+/* ================================================================
+   Input panel
+   ================================================================ */
+
+.input-panel {
+  display: grid;
+  gap: 12px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  font: 16px/1.6 var(--mono);
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: center;
+}
+
+button {
+  font: 600 15px/1 var(--body);
+  border-radius: 6px;
+  padding: 12px 18px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+}
+button.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+}
+button:disabled {
+  opacity: .55;
+  cursor: progress;
+}
+
+select {
+  font: 16px var(--body);
+  max-width: 100%;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+textarea:focus-visible,
+button:focus-visible,
+select:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ================================================================
+   Totals bar
+   ================================================================ */
+
+.totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 40px;
+  padding: 16px 0;
+  border-block: 2px solid var(--fg);
+}
+
+.total { display: grid; gap: 4px; }
+.total b {
+  font: 700 2rem/1 var(--display);
+  font-variant-numeric: tabular-nums;
+}
+
+.status {
+  color: var(--muted);
+  font-size: .92rem;
+  align-self: end;
+}
+
+/* ================================================================
+   Results table
+   ================================================================ */
+
+.table-wrap {
+  overflow-x: auto;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+th {
+  font: 600 .74rem/1.2 var(--body);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  background: var(--bg);
+}
+tbody tr:last-child td { border-bottom: 0; }
+
+/* Money and quantity columns */
+td.num, th.num {
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+td.num b { font-weight: 500; }
+
+/* Card cell: thumbnail + name + set line */
+.card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+.card img {
+  width: 44px;
+  flex: none;
+  border-radius: 3px;
+  background: var(--line);
+  aspect-ratio: 245 / 342;   /* real card proportions */
+}
+.card .nm  { font-weight: 600; }
+.card .sub { color: var(--muted); font-size: .86rem; }
+
+/* The line exactly as the user typed it */
+.input-line {
+  font-family: var(--mono);
+  font-size: .82rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* Prices of other printings, under the main price */
+.variants {
+  font-family: var(--mono);
+  font-size: .78rem;
+  color: var(--muted);
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+/* Match status badges */
+.pill {
+  display: inline-block;
+  font: 600 .72rem/1 var(--body);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 4px 7px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+.pill.ok   { color: var(--good); }
+.pill.warn { color: var(--warn); }
+.pill.bad  { color: var(--bad); }
+
+td select.printing { margin-top: 6px; font-size: 14px; }
+select.cond        { font-family: var(--mono); font-weight: 500; }
+
+/* "LP on TCGplayer ↗" button-style link */
+a.listings {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  font: 600 .88rem/1 var(--body);
+  text-decoration: none;
+  color: var(--link);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+a.listings:hover { border-color: var(--link); }
+
+/* "Your price" input */
+.override {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--mono);
+}
+.override input {
+  width: 6.5em;
+  font: 16px var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding: 6px 8px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.override input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 1px;
+}
+.override input.set {   /* a price has been entered */
+  border-color: var(--good);
+  background: var(--surface);
+}
+
+/* "your price" note under a row total */
+.mine {
+  font-family: var(--mono);
+  font-size: .72rem;
+  color: var(--good);
+  margin-top: 2px;
+}
+
+/* ================================================================
+   Screen sizes
+   ================================================================ */
+
+/* Desktop: keep the table wide enough; it scrolls sideways if needed. */
+@media (min-width: 761px) {
+  table { min-width: 980px; }
+}
+
+/* Phones: each table row becomes a stacked two-column card. */
+@media (max-width: 760px) {
+  h1      { font-size: 1.7rem; }
+  .total b { font-size: 1.6rem; }
+
+  thead { display: none; }
+  table, tbody { display: block; }
+
+  tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 16px;
+    padding: 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody tr:last-child { border-bottom: 0; }
+
+  td {
+    display: block;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  td.wide { grid-column: 1 / -1; }   /* spans both columns */
+  td.num  { text-align: left; }
+
+  /* Since the header row is hidden, label each cell from data-label. */
+  td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    font: 600 .7rem/1.4 var(--body);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--muted);
+  }
+}
+
+/* ================================================================
+   Loading indicators
+   ================================================================ */
+
+/* Live-price fetch: indeterminate progress bar pinned to the top */
+.loading-bar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 3px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  opacity: 0;
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: opacity .25s ease, transform .25s ease;
+  z-index: 100;
+  pointer-events: none;
+}
+.loading-bar.visible {
+  opacity: 1;
+  transform: scaleY(1);
+}
+.loading-bar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(90deg,
+    transparent,
+    var(--accent) 35%,
+    color-mix(in srgb, var(--accent) 60%, #fff) 70%,
+    var(--accent));
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 70%, transparent);
+  animation: loading-slide 1.15s cubic-bezier(.65, .05, .35, 1) infinite;
+}
+@keyframes loading-slide {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(260%); }
+}
+
+/* A price that's being refreshed: keep the old number, gently pulsing */
+td b.stale {
+  animation: stale-pulse 1.4s ease-in-out infinite;
+}
+@keyframes stale-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .45; }
+}
+
+/* "updating" tag with a small spinning ring, next to the printing label */
+.updating {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+}
+.updating .ring {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-top-color: var(--accent);
+  animation: ring-spin .7s linear infinite;
+}
+@keyframes ring-spin { to { transform: rotate(1turn); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-bar::before { animation-duration: 2.5s; }
+  td b.stale           { animation: none; opacity: .55; }
+  .updating .ring      { animation-duration: 1.6s; }
+}
+
+
+/* ================================================================
+   Camera scan mode (always dark: it sits over a live camera feed)
+   ================================================================ */
+.cam:not([hidden]) {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: block;
+  background: #000;
+  color: #fff;
+  overscroll-behavior: contain;
+}
+.cam video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cam-guide {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  width: min(74vw, calc(60vh * 63 / 88));
+  aspect-ratio: 63 / 88;
+  border: 3px solid rgba(255, 255, 255, .85);
+  border-radius: 4.5% / 3.2%;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .4);
+  transition: border-color .15s;
+}
+.cam-guide.steady { border-color: var(--accent); }
+/* Hold progress: fills along the bottom edge, capture when full */
+.cam-guide::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  bottom: -16px;
+  height: 6px;
+  width: calc(84% * var(--hold, 0));
+  border-radius: 3px;
+  background: var(--accent);
+}
+.cam-guide.shot   { border-color: #4ade80; }
+.cam-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s;
+}
+.cam-flash.on { opacity: .6; transition: none; }
+.cam-top {
+  position: absolute;
+  inset: 0 0 auto;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+  text-align: center;
+  font: 600 16px/1.4 var(--body);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+}
+#cam-last {
+  margin-top: 4px;
+  font: 14px/1.4 var(--mono);
+  min-height: 1.4em;
+}
+.cam-bottom {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+.cam-bottom button:not(#cam-shutter) {
+  background: rgba(0, 0, 0, .55);
+  color: #fff;
+  border-color: rgba(255, 255, 255, .4);
+}
+#cam-auto { justify-self: start; }
+#cam-done { justify-self: end; }
+#cam-shutter {
+  width: 72px;
+  height: 72px;
+  padding: 0;
+  border-radius: 50%;
+  background: #fff;
+  border: 5px solid rgba(255, 255, 255, .45);
+  background-clip: padding-box;
+}
+#cam-shutter:active { transform: scale(.94); }

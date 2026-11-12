@@ -2,9 +2,11 @@
   "name": "pkmn",
   "private": true,
   "scripts": {
-    "dev": "wrangler pages dev public",
-    "deploy": "wrangler pages deploy public --project-name binder-value-check",
-    "typecheck": "bun check"
+    "build": "bun build ./src/main.ts --outdir ./public --entry-naming app.[ext] --target browser --minify --sourcemap=linked",
+    "watch": "bun run build --watch",
+    "dev": "bun run build && (bun run watch & wrangler pages dev public)",
+    "deploy": "bun run build && wrangler pages deploy public --project-name binder-value-check",
+    "typecheck": "tsc"
   },
   "devDependencies": {
     "@types/bun": "latest",
