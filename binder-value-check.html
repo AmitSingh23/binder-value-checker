@@ -1,0 +1,1537 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Card Values">
+  <title>Binder Value Check</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Fredoka:wght@600;700&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+  <style>
+    /*
+     * Layout: one working column.
+     *   1. The card list (textarea) and buttons
+     *   2. Totals
+     *   3. Priced table (turns into stacked cards on phones)
+     */
+
+    /* ================================================================
+       Theme
+       ================================================================ */
+
+    :root {
+      --bg:         #f3f4f7;
+      --surface:    #ffffff;
+      --fg:         #1b2030;
+      --muted:      #5f6678;
+      --line:       #d9dce5;
+      --accent:     #f2c230;   /* card-border yellow */
+      --accent-ink: #2a2310;
+      --link:       #2c5bd6;
+      --good:       #1f8a4c;
+      --warn:       #a8660b;
+      --bad:        #c0392b;
+      --title-a:    #e8890c;
+      --title-b:    #e2483d;
+
+      --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+      --body:    "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --mono:    "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    }
+
+    /* Dark colors. Repeated twice because CSS can't share a block between
+       "system is dark" and "page forced to dark". Keep the two in sync. */
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg:         #12151d;
+        --surface:    #1a1f2a;
+        --fg:         #e8eaf0;
+        --muted:      #9aa1b2;
+        --line:       #2c3342;
+        --accent:     #f2c230;
+        --accent-ink: #1b1608;
+        --link:       #8fb0ff;
+        --good:       #4cc47f;
+        --warn:       #e3a54a;
+        --bad:        #ef7466;
+        --title-a:    #ffd23f;
+        --title-b:    #ff7a45;
+        color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg:         #12151d;
+      --surface:    #1a1f2a;
+      --fg:         #e8eaf0;
+      --muted:      #9aa1b2;
+      --line:       #2c3342;
+      --accent:     #f2c230;
+      --accent-ink: #1b1608;
+      --link:       #8fb0ff;
+      --good:       #4cc47f;
+      --warn:       #e3a54a;
+      --bad:        #ef7466;
+      --title-a:    #ffd23f;
+      --title-b:    #ff7a45;
+      color-scheme: dark;
+    }
+
+    /* ================================================================
+       Page
+       ================================================================ */
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font: 16px/1.5 var(--body);
+      /* Respect the iPhone notch / home-bar areas. */
+      padding-left:  max(16px, env(safe-area-inset-left, 0px));
+      padding-right: max(16px, env(safe-area-inset-right, 0px));
+      padding-block: max(32px, env(safe-area-inset-top, 0px)) 64px;
+    }
+
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: grid;
+      gap: 24px;
+    }
+
+    h1 {
+      font: 700 2.3rem/1.05 "Fredoka", var(--body);
+      letter-spacing: -.01em;
+      margin: 0;
+      text-wrap: balance;
+    }
+    h1 span {
+      background: linear-gradient(100deg, var(--title-a), var(--title-b));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    /* Header layout */
+    header {
+      background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 24px 28px 20px;
+    }
+
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 12px;
+    }
+
+    .logo {
+      width: 56px;
+      height: 56px;
+      flex-shrink: 0;
+      overflow: visible;
+    }
+    /* Holo-card sticker: white border, dark ink outline, foil sheen */
+    .logo-card {
+      transform-box: fill-box;
+      filter: drop-shadow(0 4px 6px rgb(0 0 0 / .22));
+      transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
+    }
+    .logo-sticker { stroke: #fff; stroke-width: 7; stroke-linejoin: round; }
+    .logo-ink     { stroke: #1b2030; }
+    .logo-bolt {
+      fill: #fff;
+      stroke: #1b2030;
+      stroke-width: 2.2;
+      stroke-linejoin: round;
+    }
+    .logo-sheen {
+      fill: #fff;
+      opacity: .5;
+      transform: translateX(-30px);
+    }
+    .logo-spark       { fill: var(--accent); stroke: #1b2030; stroke-width: 1.1; stroke-linejoin: round; }
+    .logo-spark.small { fill: #7ff3ff; }
+
+    /* Hovering the header tilts the card and sweeps the foil shine across it */
+    header:hover .logo-sheen {
+      transform: translateX(40px);
+      transition: transform .8s ease;
+    }
+    header:hover .logo-spark { animation: twinkle .9s ease-in-out; transform-origin: center; transform-box: fill-box; }
+    @keyframes twinkle {
+      50% { transform: scale(1.35) rotate(20deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      header:hover .logo-sheen, header:hover .logo-spark { transition: none; animation: none; }
+    }
+
+    .title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;   /* lets title shrink on narrow screens */
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font: 500 .78rem/1 var(--body);
+      color: var(--muted);
+      border: 1px solid var(--line);
+      background: var(--surface);
+      padding: 5px 10px 5px 8px;
+      border-radius: 999px;
+      width: fit-content;
+    }
+    .badge i {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--good);
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent);
+      animation: live-ping 2s ease-out infinite;
+    }
+    @keyframes live-ping {
+      0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 55%, transparent); }
+      70%  { box-shadow: 0 0 0 6px transparent; }
+      100% { box-shadow: 0 0 0 0 transparent; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .badge i { animation: none; }
+    }
+
+    .lede {
+      color: var(--muted);
+      margin: 0;
+      max-width: 62ch;
+    }
+
+    /* Small all-caps label */
+    .cap {
+      font: 600 .78rem/1 var(--body);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+    }
+
+    .hint      { color: var(--muted); font-size: .9rem; }
+    .hint code { font-family: var(--mono); font-size: .85em; }
+
+    a { color: var(--link); }
+
+    footer { color: var(--muted); font-size: .85rem; }
+
+    /* ================================================================
+       Input panel
+       ================================================================ */
+
+    .input-panel {
+      display: grid;
+      gap: 12px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 180px;
+      resize: vertical;
+      font: 16px/1.6 var(--mono);
+      color: var(--fg);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 12px 14px;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 16px;
+      align-items: center;
+    }
+
+    button {
+      font: 600 15px/1 var(--body);
+      border-radius: 6px;
+      padding: 12px 18px;
+      cursor: pointer;
+      border: 1px solid var(--line);
+      background: var(--surface);
+      color: var(--fg);
+    }
+    button.primary {
+      background: var(--accent);
+      color: var(--accent-ink);
+      border-color: var(--accent);
+    }
+    button:disabled {
+      opacity: .55;
+      cursor: progress;
+    }
+
+    select {
+      font: 16px var(--body);
+      max-width: 100%;
+      color: var(--fg);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 4px;
+    }
+
+    textarea:focus-visible,
+    button:focus-visible,
+    select:focus-visible,
+    a:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    /* ================================================================
+       Totals bar
+       ================================================================ */
+
+    .totals {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 40px;
+      padding: 16px 0;
+      border-block: 2px solid var(--fg);
+    }
+
+    .total { display: grid; gap: 4px; }
+    .total b {
+      font: 700 2rem/1 var(--display);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .status {
+      color: var(--muted);
+      font-size: .92rem;
+      align-self: end;
+    }
+
+    /* ================================================================
+       Results table
+       ================================================================ */
+
+    .table-wrap {
+      overflow-x: auto;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th {
+      font: 600 .74rem/1.2 var(--body);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--muted);
+      background: var(--bg);
+    }
+    tbody tr:last-child td { border-bottom: 0; }
+
+    /* Money and quantity columns */
+    td.num, th.num {
+      text-align: right;
+      font-family: var(--mono);
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    td.num b { font-weight: 500; }
+
+    /* Card cell: thumbnail + name + set line */
+    .card {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      min-width: 0;
+    }
+    .card img {
+      width: 44px;
+      flex: none;
+      border-radius: 3px;
+      background: var(--line);
+      aspect-ratio: 245 / 342;   /* real card proportions */
+    }
+    .card .nm  { font-weight: 600; }
+    .card .sub { color: var(--muted); font-size: .86rem; }
+
+    /* The line exactly as the user typed it */
+    .input-line {
+      font-family: var(--mono);
+      font-size: .82rem;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+
+    /* Prices of other printings, under the main price */
+    .variants {
+      font-family: var(--mono);
+      font-size: .78rem;
+      color: var(--muted);
+      margin-top: 2px;
+      white-space: nowrap;
+    }
+
+    /* Match status badges */
+    .pill {
+      display: inline-block;
+      font: 600 .72rem/1 var(--body);
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      padding: 4px 7px;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+    }
+    .pill.ok   { color: var(--good); }
+    .pill.warn { color: var(--warn); }
+    .pill.bad  { color: var(--bad); }
+
+    td select.printing { margin-top: 6px; font-size: 14px; }
+    select.cond        { font-family: var(--mono); font-weight: 500; }
+
+    /* "LP on TCGplayer ↗" button-style link */
+    a.listings {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      white-space: nowrap;
+      font: 600 .88rem/1 var(--body);
+      text-decoration: none;
+      color: var(--link);
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+    }
+    a.listings:hover { border-color: var(--link); }
+
+    /* "Your price" input */
+    .override {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      font-family: var(--mono);
+    }
+    .override input {
+      width: 6.5em;
+      font: 16px var(--mono);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      padding: 6px 8px;
+      color: var(--fg);
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+    .override input:focus-visible {
+      outline: 3px solid var(--accent);
+      outline-offset: 1px;
+    }
+    .override input.set {   /* a price has been entered */
+      border-color: var(--good);
+      background: var(--surface);
+    }
+
+    /* "your price" note under a row total */
+    .mine {
+      font-family: var(--mono);
+      font-size: .72rem;
+      color: var(--good);
+      margin-top: 2px;
+    }
+
+    /* ================================================================
+       Screen sizes
+       ================================================================ */
+
+    /* Desktop: keep the table wide enough; it scrolls sideways if needed. */
+    @media (min-width: 761px) {
+      table { min-width: 980px; }
+    }
+
+    /* Phones: each table row becomes a stacked two-column card. */
+    @media (max-width: 760px) {
+      h1      { font-size: 1.7rem; }
+      .total b { font-size: 1.6rem; }
+
+      thead { display: none; }
+      table, tbody { display: block; }
+
+      tbody tr {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px 16px;
+        padding: 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      tbody tr:last-child { border-bottom: 0; }
+
+      td {
+        display: block;
+        padding: 0;
+        border: 0;
+        min-width: 0;
+      }
+      td.wide { grid-column: 1 / -1; }   /* spans both columns */
+      td.num  { text-align: left; }
+
+      /* Since the header row is hidden, label each cell from data-label. */
+      td[data-label]::before {
+        content: attr(data-label);
+        display: block;
+        font: 600 .7rem/1.4 var(--body);
+        text-transform: uppercase;
+        letter-spacing: .08em;
+        color: var(--muted);
+      }
+    }
+
+    /* Live-price fetch: indeterminate progress bar pinned to the top */
+    .loading-bar {
+      position: fixed;
+      inset: 0 0 auto 0;
+      height: 3px;
+      overflow: hidden;
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+      opacity: 0;
+      transform: scaleY(0);
+      transform-origin: top;
+      transition: opacity .25s ease, transform .25s ease;
+      z-index: 100;
+      pointer-events: none;
+    }
+    .loading-bar.visible {
+      opacity: 1;
+      transform: scaleY(1);
+    }
+    .loading-bar::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: 40%;
+      border-radius: 0 3px 3px 0;
+      background: linear-gradient(90deg,
+        transparent,
+        var(--accent) 35%,
+        color-mix(in srgb, var(--accent) 60%, #fff) 70%,
+        var(--accent));
+      box-shadow: 0 0 10px color-mix(in srgb, var(--accent) 70%, transparent);
+      animation: loading-slide 1.15s cubic-bezier(.65, .05, .35, 1) infinite;
+    }
+    @keyframes loading-slide {
+      from { transform: translateX(-100%); }
+      to   { transform: translateX(260%); }
+    }
+
+    /* A price that's being refreshed: keep the old number, gently pulsing */
+    td b.stale {
+      animation: stale-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes stale-pulse {
+      0%, 100% { opacity: 1; }
+      50%      { opacity: .45; }
+    }
+
+    /* "updating" tag with a small spinning ring, next to the printing label */
+    .updating {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted);
+    }
+    .updating .ring {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      border: 1.5px solid color-mix(in srgb, var(--muted) 35%, transparent);
+      border-top-color: var(--accent);
+      animation: ring-spin .7s linear infinite;
+    }
+    @keyframes ring-spin { to { transform: rotate(1turn); } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .loading-bar::before { animation-duration: 2.5s; }
+      td b.stale           { animation: none; opacity: .55; }
+      .updating .ring      { animation-duration: 1.6s; }
+    }
+
+  </style>
+</head>
+
+<body>
+<main>
+  <header>
+    <div class="logo-row">
+      <svg class="logo" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <linearGradient id="bvc-holo" x1="12" y1="6" x2="44" y2="50" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#ffe34f"/>
+            <stop offset=".5" stop-color="#ffb526"/>
+            <stop offset="1" stop-color="#ff6a4d"/>
+          </linearGradient>
+          <linearGradient id="bvc-iri" x1="44" y1="6" x2="12" y2="50" gradientUnits="userSpaceOnUse">
+            <stop offset=".15" stop-color="#7ff3ff" stop-opacity=".55"/>
+            <stop offset=".45" stop-color="#ffffff" stop-opacity="0"/>
+            <stop offset=".8"  stop-color="#ff7ad9" stop-opacity=".45"/>
+          </linearGradient>
+          <clipPath id="bvc-card"><rect x="12" y="6" width="32" height="44" rx="6"/></clipPath>
+        </defs>
+        <g class="logo-card" transform="rotate(-8 28 28)">
+          <!-- White sticker border, then the holo card -->
+          <rect class="logo-sticker" x="12" y="6" width="32" height="44" rx="6"/>
+          <rect x="12" y="6" width="32" height="44" rx="6" fill="url(#bvc-holo)"/>
+          <g clip-path="url(#bvc-card)">
+            <rect x="12" y="6" width="32" height="44" fill="url(#bvc-iri)"/>
+            <polygon class="logo-sheen" points="4,40 22,4 30,4 12,40"/>
+          </g>
+          <rect class="logo-ink" x="12" y="6" width="32" height="44" rx="6" stroke-width="2.4"/>
+          <rect class="logo-ink" x="16" y="10" width="24" height="36" rx="3" stroke-width="1.2" opacity=".25"/>
+          <!-- Bolt -->
+          <path class="logo-bolt" d="M31 13 L19 31 H27 L24 43 L37 24 H29 Z"/>
+        </g>
+        <!-- Sparkles -->
+        <path class="logo-spark" d="M49 0 Q50.8 6.2 57 8 Q50.8 9.8 49 16 Q47.2 9.8 41 8 Q47.2 6.2 49 0 Z"/>
+        <path class="logo-spark small" d="M6 38 Q7.3 42.7 12 44 Q7.3 45.3 6 50 Q4.7 45.3 0 44 Q4.7 42.7 6 38 Z"/>
+      </svg>
+      <div class="title-block">
+        <h1>Binder <span>Value Check</span></h1>
+        <span class="badge"><i aria-hidden="true"></i>Live TCGplayer prices</span>
+      </div>
+    </div>
+    <p class="lede">
+      Paste one card per line as name and collector number, with an optional condition at the end.
+      You get near-mint prices from TCGplayer and a link to each card's TCGplayer listings
+      filtered to the condition you set.
+    </p>
+  </header>
+
+  <div id="loading-bar" class="loading-bar" aria-hidden="true"></div>
+
+  <section class="input-panel">
+    <label class="cap" for="cards">Your cards</label>
+    <textarea id="cards" spellcheck="false" autocapitalize="off" autocorrect="off">Charizard 4/102 MP
+Pikachu ex 238/191
+Umbreon VMAX 215/203 LP
+2x Gengar 94/165
+Squirtle 63/102 HP</textarea>
+
+    <div class="controls">
+      <button class="primary" id="go">Look up values</button>
+      <button id="copy" disabled>Copy as CSV</button>
+      <span class="hint">
+        Formats:
+        <code>Charizard 4/102</code>,
+        <code>Charizard 4/102 LP</code>,
+        <code>2x Gengar 94/165 MP</code>,
+        <code>Mew TG12/TG30</code>
+      </span>
+    </div>
+  </section>
+
+  <section class="totals" aria-live="polite">
+    <div class="total"><span class="cap">Total</span><b id="t-usd">—</b></div>
+    <div class="total"><span class="cap">Cards</span><b id="t-count">—</b></div>
+    <div class="status" id="status">Press “Look up values” to price the list.</div>
+  </section>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Card</th>
+          <th>Match</th>
+          <th>Condition</th>
+          <th>Listings</th>
+          <th class="num">Qty</th>
+          <th class="num">TCGplayer NM (USD)</th>
+          <th class="num">Your price</th>
+          <th class="num">Total (USD)</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+
+  <footer>
+    Prices are for raw, near-mint cards: TCGplayer’s market price (recent sales). Prices marked
+    “live” come straight from TCGplayer through the local server; the rest come from the free
+    TCGdex API, refreshed daily. For played cards, the listings link opens TCGplayer filtered to that
+    condition, printing and English, so you can see what they’re actually selling for. Change a card’s
+    condition or printing in the table and its link updates. Put what you found into “Your price” and it
+    replaces the near-mint price in the totals. Your list, lookups and prices are saved in this browser,
+    so they’re still here after a refresh.
+  </footer>
+</main>
+
+<script>
+/* =====================================================================
+   Constants
+   ===================================================================== */
+
+const API = "https://api.tcgdex.net/v2/en";
+
+// Which printing counts as a card's "main" price, best first.
+// Printings not in this list go to the end.
+const VARIANT_ORDER = [
+  "holofoil",
+  "normal",
+  "1st-edition-holofoil",
+  "1st-edition",
+  "1st-edition-normal",
+  "unlimited-holofoil",
+  "unlimited",
+  "reverse-holofoil",
+];
+
+// Short names shown in the table.
+const VARIANT_LABEL = {
+  "holofoil":             "holo",
+  "normal":               "normal",
+  "reverse-holofoil":     "reverse",
+  "1st-edition-holofoil": "1st ed holo",
+  "1st-edition":          "1st ed",
+  "1st-edition-normal":   "1st ed",
+  "unlimited-holofoil":   "unl. holo",
+  "unlimited":            "unlimited",
+};
+
+// TCGplayer's own names for printings, spelled the way its listing filter expects.
+const TCGPLAYER_PRINTING = {
+  "holofoil":             "Holofoil",
+  "normal":               "Normal",
+  "reverse-holofoil":     "Reverse Holofoil",
+  "1st-edition-holofoil": "1st Edition Holofoil",
+  "1st-edition":          "1st Edition",
+  "1st-edition-normal":   "1st Edition",
+  "unlimited-holofoil":   "Unlimited Holofoil",
+  "unlimited":            "Unlimited",
+};
+
+const CONDITIONS = ["NM", "LP", "MP", "HP", "DMG"];
+
+const CONDITION_NAME = {
+  NM:  "Near Mint",
+  LP:  "Lightly Played",
+  MP:  "Moderately Played",
+  HP:  "Heavily Played",
+  DMG: "Damaged",
+};
+
+// Everything a user might type for a condition, mapped to our short code.
+const CONDITION_ALIASES = {
+  "NM": "NM",   "MINT": "NM",           "NEAR MINT": "NM",
+  "LP": "LP",   "LIGHTLY PLAYED": "LP", "LIGHT PLAYED": "LP",
+  "MP": "MP",   "MODERATELY PLAYED": "MP", "PLAYED": "MP",
+  "HP": "HP",   "HEAVILY PLAYED": "HP", "HEAVY PLAYED": "HP",
+  "DMG": "DMG", "DM": "DMG",            "DAMAGED": "DMG", "POOR": "DMG",
+};
+
+const STORAGE_KEYS = {
+  list:      "bvc-list",        // the textarea contents
+  results:   "bvc-results",     // the last lookup
+  overrides: "bvc-overrides",   // "Your price" entries
+};
+
+/* =====================================================================
+   Small helpers
+   ===================================================================== */
+
+const $ = (id) => document.getElementById(id);
+
+const usdFormat = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const money = (n) => (n != null ? usdFormat.format(n) : "—");
+
+// Escape text before putting it in HTML.
+function esc(value) {
+  const replacements = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" };
+  return String(value ?? "").replace(/[&<>"]/g, (ch) => replacements[ch]);
+}
+
+// localStorage that never throws (private mode, storage full, etc.).
+const store = {
+  get(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw == null ? fallback : JSON.parse(raw);
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {}
+  },
+};
+
+/* =====================================================================
+   Reading the user's list
+   ===================================================================== */
+
+// A condition at the end of the line, optionally in () or [] and after a
+// separator, e.g. " LP", ", near mint", " (MP)", " - [HP]".
+// Longer phrases come first so "near mint" wins over "mint".
+const TRAILING_CONDITION = /[\s,;|(\[–-]+\(?\[?\s*(near mint|lightly played|light played|moderately played|heavily played|heavy played|damaged|played|mint|poor|nm|lp|mp|hp|dmg|dm)\s*\)?\]?$/i;
+
+// A quantity at the start: "2x Gengar", "3 x Gengar".
+const LEADING_QTY = /^(\d+)\s*x\s+/i;
+
+// A quantity at the end: "Gengar 94/165 x2".
+const TRAILING_QTY = /\s+x\s*(\d+)$/i;
+
+// What's left must be "<name> <number>" or "<name> <number>/<set total>".
+// Numbers may have letter prefixes/suffixes (TG12, SV49, 25a), and a "#" is allowed.
+//   group 1: name   group 2: card number   group 3: set total (optional)
+const NAME_AND_NUMBER = /^(.+?)[\s,;|#–-]+#?([A-Za-z]*\d+[A-Za-z]*)\s*(?:\/\s*([A-Za-z]*\d+))?$/;
+
+/**
+ * Turn one line of the list into an entry.
+ * Examples it accepts:
+ *   "2x Charizard 4/102 LP"
+ *   "Charizard, 004/102 x2 (MP)"
+ *   "Mew TG12/TG30"
+ *   "Charizard 4 near mint"
+ */
+function parseLine(raw) {
+  let line = raw.trim();
+  if (!line) return null;
+
+  let qty = 1;
+  let cond = "NM";
+
+  const takeCondition = () => {
+    const m = line.match(TRAILING_CONDITION);
+    if (m && CONDITION_ALIASES[m[1].toUpperCase()]) {
+      cond = CONDITION_ALIASES[m[1].toUpperCase()];
+      line = line.slice(0, -m[0].length);
+    }
+  };
+
+  const takeTrailingQty = () => {
+    const m = line.match(TRAILING_QTY);
+    if (m) {
+      qty = Number(m[1]);
+      line = line.slice(0, -m[0].length);
+    }
+  };
+
+  const lead = line.match(LEADING_QTY);
+  if (lead) {
+    qty = Number(lead[1]);
+    line = line.slice(lead[0].length);
+  }
+
+  // Condition and trailing quantity can come in either order, so try twice.
+  for (let i = 0; i < 2; i++) {
+    takeCondition();
+    takeTrailingQty();
+  }
+
+  const m = line.match(NAME_AND_NUMBER);
+  if (!m) {
+    return { raw, qty, cond, error: "Couldn’t find a card number. Use “Name 12/99”." };
+  }
+
+  return {
+    raw,
+    qty,
+    cond,
+    name: m[1].trim(),
+    number: m[2],
+    total: m[3] || null,
+  };
+}
+
+// Normalise card numbers so they compare equal:
+// "054" -> "54", "TG07" -> "TG7", "sv49" -> "SV49".
+function normalizeNumber(s) {
+  return String(s).toUpperCase().replace(/^([A-Z]*)0*(\d)/, "$1$2");
+}
+
+/* =====================================================================
+   Looking cards up (TCGdex)
+   ===================================================================== */
+
+// One request per URL. Failed requests are forgotten so they can be retried.
+const requestCache = new Map();
+
+function getJSON(url) {
+  if (!requestCache.has(url)) {
+    const request = fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`TCGdex returned ${res.status}`);
+        return res.json();
+      })
+      .catch((err) => {
+        requestCache.delete(url);
+        throw err;
+      });
+    requestCache.set(url, request);
+  }
+  return requestCache.get(url);
+}
+
+// TCG Pocket (the phone game) cards share names and numbers with real cards. Skip them.
+function isPocketCard(card) {
+  return /pocket/i.test(card.set?.serie?.name || "") || /^[AB]\d/.test(card.set?.id || "");
+}
+
+/**
+ * Find every printing that matches an entry's name and number.
+ * Returns { matches: [card, ...], note?: "warning text" }.
+ */
+async function findCard(entry) {
+  // 1. Every card whose name contains the search text.
+  const list = await getJSON(`${API}/cards?name=${encodeURIComponent(entry.name)}`);
+
+  // 2. Keep the ones with the right number.
+  const wantedNumber = normalizeNumber(entry.number);
+  let hits = (list || []).filter((c) => normalizeNumber(c.localId) === wantedNumber);
+  if (!hits.length) return { matches: [] };
+
+  // 3. Prefer an exact name match ("Charizard", not "Dark Charizard").
+  const exactName = hits.filter((c) => c.name.toLowerCase() === entry.name.toLowerCase());
+  if (exactName.length) hits = exactName;
+
+  // 4. Load full details (set, prices) for up to 12 candidates.
+  let details = await Promise.all(hits.slice(0, 12).map((c) => getJSON(`${API}/cards/${c.id}`)));
+  details = details.filter((card) => !isPocketCard(card));
+
+  // 5. If a set size was given ("/102"), use it to pick the right set.
+  if (entry.total && /^\d+$/.test(entry.total)) {
+    const setSize = Number(entry.total);
+    const bySetSize = details.filter((card) => card.set?.cardCount?.official === setSize);
+    if (bySetSize.length) return { matches: bySetSize };
+    return {
+      matches: details,
+      note: `No set with ${setSize} cards had this number; showing closest matches.`,
+    };
+  }
+
+  return { matches: details };
+}
+
+/* =====================================================================
+   Prices and links
+   ===================================================================== */
+
+function variantRank(key) {
+  const i = VARIANT_ORDER.indexOf(key);
+  return i === -1 ? VARIANT_ORDER.length : i;
+}
+
+/**
+ * Near-mint price info for a card:
+ *   usd         price of the main printing (market price, else mid price)
+ *   variantKey  TCGdex key of the main printing, e.g. "holofoil"
+ *   variant     short label of the main printing, e.g. "holo"
+ *   others      [{ label, usd }] for the other priced printings
+ *   productId   TCGplayer product id of the main printing
+ */
+function priceInfo(card) {
+  const tcgplayer = card.pricing?.tcgplayer || {};
+  const priceOf = (key) => tcgplayer[key].marketPrice ?? tcgplayer[key].midPrice;
+
+  const variants = Object.keys(tcgplayer)
+    .filter((key) => tcgplayer[key] && typeof tcgplayer[key] === "object")
+    .sort((a, b) => variantRank(a) - variantRank(b));
+
+  const priced = variants.filter((key) => priceOf(key) != null);
+  const main = priced[0] || variants[0];
+
+  return {
+    usd: priced[0] ? priceOf(main) : null,
+    variantKey: main,
+    variant: main ? (VARIANT_LABEL[main] || main) : null,
+    others: priced.slice(1).map((key) => ({ label: VARIANT_LABEL[key] || key, usd: priceOf(key) })),
+    productId: main ? tcgplayer[main].productId : null,
+  };
+}
+
+/**
+ * The card's TCGplayer page, with listings filtered to the condition,
+ * printing and English. Falls back to a TCGplayer search if there's no product id.
+ */
+function listingsURL(card, cond) {
+  const info = priceInfo(card);
+
+  if (info.productId == null) {
+    const query = `${card.name} ${card.localId}`;
+    return `https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&q=${encodeURIComponent(query)}`;
+  }
+
+  const params = new URLSearchParams({ Language: "English", Condition: CONDITION_NAME[cond] });
+  const printing = TCGPLAYER_PRINTING[info.variantKey];
+  if (printing) params.set("Printing", printing);
+
+  return `https://www.tcgplayer.com/product/${info.productId}?${params}`;
+}
+
+/* ---------- Live TCGplayer prices ----------
+   TCGdex refreshes its prices once a day. Our server (server.ts) asks TCGplayer
+   directly. The page is served by that server, so this is same-origin: no CORS.
+   Each product is asked for once per page load. Until the answer arrives, or if it
+   fails (e.g. the page was opened as a file), the TCGdex price is shown instead. */
+
+// productId|condition -> live price; null if TCGplayer had none or the request failed;
+// undefined while the request is still out.
+const livePrices = new Map();
+
+// Tracks in-flight product-condition pairs so we can show a loading indicator
+// and prevent TCGdex fallback during the fetch.
+const pendingKeys = new Set();
+
+// Asks our server for a product's current market price. Resolves to null if it fails.
+async function fetchMarketPrice(productId, condition) {
+  try {
+    const response = await fetch(`/price?productId=${encodeURIComponent(productId)}&condition=${encodeURIComponent(condition)}`);
+    if (!response.ok) return null;
+    const prices = await response.json();
+    return prices ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function requestLivePrice(productId, condition) {
+  const key = `${productId}|${condition}`;
+  // Each pair is fetched once: skip if it's in flight or already answered.
+  if (productId == null || pendingKeys.has(key) || livePrices.has(key)) return;
+
+  const cond = CONDITION_NAME[condition];
+
+  // Mark as pending so the UI shows a loading indicator
+  pendingKeys.add(key);
+  fetchMarketPrice(productId, cond).then((price) => {
+    // All variant prices from the /price API
+    const variants = (price ?? [])
+      .filter(it => it.condition === cond)
+      .map(it => ({
+        variant: it.variant ?? "Standard",
+        price: it.marketPrice ?? null,
+      }));
+    // Main price: first variant with a price, or null
+    const mainPrice = variants.find(v => v.price != null)?.price ?? null;
+
+    console.log("price", price);
+
+    livePrices.set(key, { mainPrice, variants });
+    pendingKeys.delete(key);
+    toggleLoadingBar();
+    showLivePrice(productId);
+  }).catch(() => {
+    livePrices.set(key, { mainPrice: null, variants: [] });
+    pendingKeys.delete(key);
+    toggleLoadingBar();
+    showLivePrice(productId);
+  });
+}
+
+// The live price we use for a card: TCGplayer's live price if we have it for the given condition, else TCGdex's.
+// Never returns null during loading — keeps the last-known price visible while the bar shows activity at the top.
+function nearMintPrice(card, condition) {
+  const info = priceInfo(card);
+  const key = `${info.productId}|${condition}`;
+  const entry = livePrices.get(key);
+  if (entry != null && typeof entry === "object") return entry.mainPrice ?? null;
+  return info.usd;
+}
+
+const hasLivePrice = (card, condition) => {
+  const entry = livePrices.get(`${priceInfo(card).productId}|${condition}`);
+  return entry != null && typeof entry === "object" && entry.mainPrice != null;
+};
+
+const isLoadingPrice = (card, condition) =>
+  pendingKeys.has(`${priceInfo(card).productId}|${condition}`);
+
+// Row -> the market price it last showed. While a new condition/printing's live
+// price is loading, the row keeps showing that number instead of jumping to
+// TCGdex's (different) fallback and back.
+const shownPrice = new WeakMap();
+
+function marketPrice(r) {
+  const card = chosenCard(r);
+  if (isLoadingPrice(card, r.entry.cond) && shownPrice.has(r)) return shownPrice.get(r);
+  const price = nearMintPrice(card, r.entry.cond);
+  shownPrice.set(r, price);
+  return price;
+}
+
+/* =====================================================================
+   App state
+   =====================================================================
+   Each item in `results` is one line of the list, in one of three shapes:
+     { entry, pending: true }                  still looking up
+     { entry, error: true | "message" }        not found / failed
+     { entry, matches: [...], choice, note? }  found; `choice` = chosen printing
+*/
+
+let results = [];
+let savedAt = null;   // when the shown lookup was made, if it was restored from a save
+
+const chosenCard = (r) => r.matches[r.choice];
+const isPriced = (r) => Boolean(r.matches?.length);
+
+/* ---------- "Your price" overrides ----------
+   Keyed by exact printing + condition, so an LP price stays with LP and
+   comes back if the card is looked up again or the list is reordered. */
+
+let overrides = store.get(STORAGE_KEYS.overrides, {});
+
+const overrideKey = (r) => `${chosenCard(r).id}|${r.entry.cond}`;
+const overrideFor = (r) => overrides[overrideKey(r)] ?? null;
+
+// "$1,234.5" -> 1234.5. Returns null for anything that isn't a non-negative number.
+function parsePrice(text) {
+  const n = parseFloat(String(text).replace(/[$,\s]/g, ""));
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+}
+
+// What one copy is worth: your price if set, otherwise the market price for the selected condition.
+function unitValue(r) {
+  const mine = overrideFor(r);
+  return mine != null ? mine : marketPrice(r);
+}
+
+function rowTotal(r) {
+  const each = unitValue(r);
+  return each != null ? each * r.entry.qty : null;
+}
+
+/* ---------- Saving the last lookup ---------- */
+
+// Keep only what the table needs from each card (the full TCGdex record is much bigger).
+function slimCard(c) {
+  return {
+    id: c.id,
+    name: c.name,
+    localId: c.localId,
+    rarity: c.rarity,
+    image: c.image,
+    set: { name: c.set?.name, cardCount: { official: c.set?.cardCount?.official } },
+    pricing: { tcgplayer: c.pricing?.tcgplayer },
+  };
+}
+
+function saveResults() {
+  if (results.some((r) => r.pending)) return;   // don't save a half-finished lookup
+  store.set(STORAGE_KEYS.results, {
+    savedAt: savedAt || new Date().toISOString(),
+    results: results.map((r) => ({
+      entry: r.entry,
+      error: r.error,
+      note: r.note,
+      choice: r.choice,
+      matches: r.matches?.map(slimCard),
+    })),
+  });
+}
+
+function restoreSaved() {
+  const savedList = store.get(STORAGE_KEYS.list, null);
+  if (savedList) $("cards").value = savedList;
+
+  // The last lookup as it was left (printings, conditions). Prices are from when it was made.
+  const last = store.get(STORAGE_KEYS.results, null);
+  if (last?.results?.length) {
+    results = last.results.map((r) =>
+      r.matches?.length
+        ? { entry: r.entry, matches: r.matches, choice: r.choice ?? 0, note: r.note }
+        : { entry: r.entry, error: r.error ?? true }
+    );
+    savedAt = last.savedAt;
+  }
+}
+
+/* =====================================================================
+   Rendering the table
+   ===================================================================== */
+
+function pendingRow(r) {
+  return `
+    <tr>
+      <td class="wide" colspan="8">
+        <span class="input-line">${esc(r.entry?.raw ?? "")}</span> — looking up…
+      </td>
+    </tr>`;
+}
+
+function notFoundRow(r) {
+  const message = typeof r.error === "string" ? `<div class="hint">${esc(r.error)}</div>` : "";
+  return `
+    <tr>
+      <td class="wide"><div class="input-line">${esc(r.entry.raw)}</div></td>
+      <td class="wide" colspan="7"><span class="pill bad">Not found</span>${message}</td>
+    </tr>`;
+}
+
+// Thumbnail, name, set line, and the original input line.
+function cardCell(r, card) {
+  const img = card.image ? `<img src="${esc(card.image)}/low.webp" alt="" loading="lazy">` : "";
+  const setSize = card.set?.cardCount?.official ?? "?";
+  const rarity = card.rarity ? ` · ${esc(card.rarity)}` : "";
+  return `
+    <div class="card">
+      ${img}
+      <div>
+        <div class="nm">${esc(card.name)}</div>
+        <div class="sub">${esc(card.set?.name)} · ${esc(card.localId)}/${esc(setSize)}${rarity}</div>
+        <div class="input-line">${esc(r.entry.raw)}</div>
+      </div>
+    </div>`;
+}
+
+// Match badge, an optional warning, and a printing picker when there's more than one.
+function matchCell(r, i) {
+  let pill;
+  if (r.note)                  pill = `<span class="pill warn">Check</span>`;
+  else if (r.matches.length > 1) pill = `<span class="pill warn">${r.matches.length} printings</span>`;
+  else                         pill = `<span class="pill ok">Matched</span>`;
+
+  const note = r.note ? `<div class="hint">${esc(r.note)}</div>` : "";
+
+  let picker = "";
+  if (r.matches.length > 1) {
+    const options = r.matches.map((m, j) => `
+      <option value="${j}" ${j === r.choice ? "selected" : ""}>
+        ${esc(m.set?.name)} · ${esc(m.localId)}/${esc(m.set?.cardCount?.official)}
+      </option>`).join("");
+    picker = `<select class="printing" id="pick-${i}" data-i="${i}" aria-label="Choose printing">${options}</select>`;
+  }
+
+  return pill + note + picker;
+}
+
+function conditionSelect(r, i) {
+  const options = CONDITIONS.map((code) => `
+    <option value="${code}" ${code === r.entry.cond ? "selected" : ""} title="${CONDITION_NAME[code]}">${code}</option>`
+  ).join("");
+  return `<select class="cond" id="cond-${i}" data-cond="${i}" aria-label="Condition">${options}</select>`;
+}
+
+function listingsLink(r, card) {
+  const cond = r.entry.cond;
+
+  return `
+    <a class="listings"
+       href="${esc(listingsURL(card, cond))}"
+       target="_blank" rel="noopener"
+       title="${esc(CONDITION_NAME[cond])} listings on TCGplayer">${esc(cond)} on TCGplayer ↗</a>`;
+}
+
+// Main price (live from TCGplayer once it arrives for the selected condition), its printing,
+// and TCGdex's prices for the other printings.
+function marketPriceCell(r) {
+  const card = chosenCard(r);
+  const cond = r.entry.cond;
+  const info = priceInfo(card);
+  const price = marketPrice(r);
+  const loading = isLoadingPrice(card, cond);
+  const status = loading
+    ? `<span class="updating"><span class="ring" aria-hidden="true"></span>updating</span>`
+    : hasLivePrice(card, cond) ? "live" : null;
+  const label = [info.variant ? esc(info.variant) : null, status].filter(Boolean).join(" · ");
+  const mainLabel = label ? `<div class="variants">${label}</div>` : "";
+  const others = info.others
+    .map((o) => `<div class="variants">${esc(o.label)} ${money(o.usd)}</div>`)
+    .join("");
+  return `<b class="${loading ? "stale" : ""}">${money(price)}</b>${mainLabel}${others}`;
+}
+
+// A live price arrived: update just the rows showing that product's condition, plus the totals.
+// (Not a full redraw, so a price box you're typing in keeps focus.)
+function showLivePrice(productId) {
+  // Find all conditions that now have live prices for this product
+  const conditions = [];
+  for (const key of livePrices.keys()) {
+    if (key.startsWith(`${productId}|`)) {
+      conditions.push(key.split("|")[1]);
+    }
+  }
+
+  results.forEach((r, i) => {
+    if (!isPriced(r) || priceInfo(chosenCard(r)).productId !== productId) return;
+    if (!conditions.includes(r.entry.cond)) return;
+    const priceCell = $(`price-${i}`);
+    const totalCellEl = $(`total-${i}`);
+    if (priceCell) priceCell.innerHTML = marketPriceCell(r);
+    if (totalCellEl) totalCellEl.innerHTML = totalCell(r);
+  });
+  updateSummary();
+}
+
+function yourPriceInput(r, i, card) {
+  const mine = overrideFor(r);
+  const label = `Your price for ${esc(card.name)} in ${esc(CONDITION_NAME[r.entry.cond])}`;
+  return `
+    <label class="override">$<input
+      id="ov-${i}" data-ov="${i}"
+      type="text" inputmode="decimal" autocomplete="off" placeholder="—"
+      value="${mine != null ? mine.toFixed(2) : ""}"
+      class="${mine != null ? "set" : ""}"
+      aria-label="${label}"></label>`;
+}
+
+function totalCell(r) {
+  const note = overrideFor(r) != null ? `<div class="mine">your price</div>` : "";
+  return `<b>${money(rowTotal(r))}</b>${note}`;
+}
+
+function cardRow(r, i) {
+  const card = chosenCard(r);
+  return `
+    <tr>
+      <td class="wide">${cardCell(r, card)}</td>
+      <td class="wide">${matchCell(r, i)}</td>
+      <td data-label="Condition">${conditionSelect(r, i)}</td>
+      <td data-label="Listings">${listingsLink(r, card)}</td>
+      <td class="num" data-label="Qty">${r.entry.qty}</td>
+      <td class="num" data-label="TCGplayer (USD)" id="price-${i}">${marketPriceCell(r)}</td>
+      <td class="num" data-label="Your price">${yourPriceInput(r, i, card)}</td>
+      <td class="num" data-label="Total (USD)" id="total-${i}">${totalCell(r)}</td>
+    </tr>`;
+}
+
+function render() {
+  // Ask for live prices first (each product/condition pair only once), so rows
+  // drawn below know which prices are still loading and keep their old number.
+  for (const r of results) {
+    if (isPriced(r)) requestLivePrice(priceInfo(chosenCard(r)).productId, r.entry.cond);
+  }
+
+  $("rows").innerHTML = results.map((r, i) => {
+    if (r.pending) return pendingRow(r);
+    if (r.error)   return notFoundRow(r);
+    return cardRow(r, i);
+  }).join("");
+
+  updateSummary();
+  toggleLoadingBar();
+}
+
+function toggleLoadingBar() {
+  const bar = $("loading-bar");
+  if (!bar) return;
+  const busy = pendingKeys.size > 0;
+  bar.classList.toggle("visible", busy);
+  bar.setAttribute("aria-hidden", busy ? "false" : "true");
+}
+
+/* =====================================================================
+   Totals and status line
+   (also run on every keystroke in a price box, without redrawing rows)
+   ===================================================================== */
+
+function statusText() {
+  if (!results.length) return "Press “Look up values” to price the list.";
+
+  const done = results.filter((r) => !r.pending).length;
+  if (done < results.length) return `Looking up ${done + 1} of ${results.length}…`;
+
+  const priced     = results.filter(isPriced).length;
+  const notFound   = results.filter((r) => r.error).length;
+  const withMine   = results.filter((r) => isPriced(r) && overrideFor(r) != null).length;
+  const playedAtNM = results.filter((r) => isPriced(r) && r.entry.cond !== "NM" && overrideFor(r) == null).length;
+
+  const parts = [`${priced} of ${results.length} lines priced`];
+  if (notFound)   parts.push(`${notFound} not found`);
+  if (withMine)   parts.push(`${withMine} with your price`);
+  if (playedAtNM) parts.push(`${playedAtNM} played without your price (counted at NM)`);
+  if (savedAt) {
+    const when = new Date(savedAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+    parts.push(`market prices from ${when}`);
+  }
+  return parts.join(" · ") + ".";
+}
+
+function updateSummary() {
+  const priced = results.filter(isPriced);
+  const totalUsd = priced.reduce((sum, r) => sum + (rowTotal(r) || 0), 0);
+  const cardCount = priced.reduce((sum, r) => sum + r.entry.qty, 0);
+  const stillLooking = results.some((r) => r.pending);
+
+  $("t-usd").textContent = priced.length ? money(totalUsd) : "—";
+  $("t-count").textContent = priced.length ? cardCount : "—";
+  $("status").textContent = statusText();
+  $("copy").disabled = !priced.length || stillLooking;
+}
+
+/* =====================================================================
+   Running a lookup
+   ===================================================================== */
+
+const PARALLEL_LOOKUPS = 4;
+
+async function lookUpAll() {
+  store.set(STORAGE_KEYS.list, $("cards").value);
+
+  const entries = $("cards").value.split("\n").map(parseLine).filter(Boolean);
+  results = entries.map((entry) => (entry.error ? { entry, error: entry.error } : { entry, pending: true }));
+  savedAt = null;
+  render();
+  $("go").disabled = true;
+
+  // A few workers pull lines off a shared queue until it's empty.
+  let next = 0;
+  async function worker() {
+    while (next < results.length) {
+      const i = next++;
+      const r = results[i];
+      if (!r.pending) continue;
+
+      try {
+        const { matches, note } = await findCard(r.entry);
+        results[i] = matches.length
+          ? { entry: r.entry, matches, choice: 0, note }
+          : { entry: r.entry, error: true };   // shows just "Not found"
+      } catch (err) {
+        results[i] = {
+          entry: r.entry,
+          error: `Lookup failed (${err.message}). Check your connection and try again.`,
+        };
+      }
+      render();
+    }
+  }
+  await Promise.all(Array.from({ length: PARALLEL_LOOKUPS }, worker));
+
+  $("go").disabled = false;
+  render();
+  saveResults();
+}
+
+/* =====================================================================
+   CSV export
+   ===================================================================== */
+
+function toCSV() {
+  const quote = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const row = (cells) => cells.map(quote).join(",");
+
+  const lines = [row([
+    "Input", "Card", "Set", "Number", "Rarity", "Condition", "Qty",
+    "TCGplayer NM USD", "Your price USD", "Total USD", "TCGplayer listings",
+  ])];
+
+  for (const r of results) {
+    if (!isPriced(r)) {
+      lines.push(row([r.entry.raw, "NOT FOUND", "", "", "", r.entry.cond, r.entry.qty, "", "", "", ""]));
+      continue;
+    }
+    const card = chosenCard(r);
+    lines.push(row([
+      r.entry.raw,
+      card.name,
+      card.set?.name,
+      `${card.localId}/${card.set?.cardCount?.official ?? ""}`,
+      card.rarity,
+      r.entry.cond,
+      r.entry.qty,
+      marketPrice(r)?.toFixed(2),
+      overrideFor(r)?.toFixed(2),
+      rowTotal(r)?.toFixed(2),
+      listingsURL(card, r.entry.cond),
+    ]));
+  }
+
+  return lines.join("\n");
+}
+
+async function copyCSV() {
+  const text = toCSV();
+  try {
+    await navigator.clipboard.writeText(text);
+    $("status").textContent = "Copied CSV to clipboard.";
+  } catch {
+    // Older browsers: copy through a hidden textarea.
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    $("status").textContent = ok ? "Copied CSV to clipboard." : "Your browser blocked clipboard access.";
+  }
+}
+
+/* =====================================================================
+   Events
+   ===================================================================== */
+
+// Printing picker, condition picker, and tidying a price box when you leave it.
+document.addEventListener("change", (e) => {
+  const el = e.target;
+
+  if (el.matches("select[data-i]")) {
+    results[Number(el.dataset.i)].choice = Number(el.value);
+    render();
+    saveResults();
+  }
+
+  if (el.matches("select[data-cond]")) {
+    results[Number(el.dataset.cond)].entry.cond = el.value;
+    render();
+    saveResults();
+  }
+
+  // "12.5" -> "12.50" once you're done typing.
+  if (el.matches("input[data-ov]")) {
+    const mine = overrideFor(results[Number(el.dataset.ov)]);
+    if (mine != null) el.value = mine.toFixed(2);
+  }
+});
+
+// Typing a price: saved and totalled as you type. The row isn't redrawn,
+// so the box keeps focus.
+document.addEventListener("input", (e) => {
+  const el = e.target;
+  if (!el.matches("input[data-ov]")) return;
+
+  const r = results[Number(el.dataset.ov)];
+  const price = parsePrice(el.value);
+
+  if (price == null) delete overrides[overrideKey(r)];
+  else overrides[overrideKey(r)] = price;
+  store.set(STORAGE_KEYS.overrides, overrides);
+
+  el.classList.toggle("set", price != null);
+  $(`total-${el.dataset.ov}`).innerHTML = totalCell(r);
+  updateSummary();
+});
+
+$("cards").addEventListener("input", () => store.set(STORAGE_KEYS.list, $("cards").value));
+$("go").addEventListener("click", lookUpAll);
+$("copy").addEventListener("click", copyCSV);
+
+/* =====================================================================
+   Start
+   ===================================================================== */
+
+restoreSaved();
+render();
+</script>
+</body>
+</html>
