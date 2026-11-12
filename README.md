@@ -8,3 +8,14 @@ bun install
 bun run dev      # local preview at http://localhost:8788
 bun run deploy   # deploy to Cloudflare Pages (run from this folder)
 ```
+
+## Adding cards from photos
+
+"Add from photo" sends each photo to `functions/scan.ts` (`POST /scan`), which reads
+card names and numbers with Workers AI (`@cf/mistralai/mistral-small-3.1-24b-instruct`,
+free daily allowance) and appends them to the list.
+
+Setup on the Pages project (Settings → Bindings / Variables and Secrets), then redeploy:
+
+- **Workers AI** binding, variable name `AI` (required)
+- `SCAN_PASSCODE` secret (optional): if set, the page asks for it once before scanning

@@ -250,6 +250,97 @@
       padding: 12px 14px;
     }
 
+    /* ================================================================
+       Camera scan mode (always dark: it sits over a live camera feed)
+       ================================================================ */
+    .cam:not([hidden]) {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: block;
+      background: #000;
+      color: #fff;
+      overscroll-behavior: contain;
+    }
+    .cam video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .cam-guide {
+      position: absolute;
+      left: 50%;
+      top: 46%;
+      transform: translate(-50%, -50%);
+      width: min(74vw, calc(60vh * 63 / 88));
+      aspect-ratio: 63 / 88;
+      border: 3px solid rgba(255, 255, 255, .85);
+      border-radius: 4.5% / 3.2%;
+      box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .4);
+      transition: border-color .15s;
+    }
+    .cam-guide.steady { border-color: var(--accent); }
+    /* Hold progress: fills along the bottom edge, capture when full */
+    .cam-guide::after {
+      content: "";
+      position: absolute;
+      left: 8%;
+      bottom: -16px;
+      height: 6px;
+      width: calc(84% * var(--hold, 0));
+      border-radius: 3px;
+      background: var(--accent);
+    }
+    .cam-guide.shot   { border-color: #4ade80; }
+    .cam-flash {
+      position: absolute;
+      inset: 0;
+      background: #fff;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .3s;
+    }
+    .cam-flash.on { opacity: .6; transition: none; }
+    .cam-top {
+      position: absolute;
+      inset: 0 0 auto;
+      padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
+      text-align: center;
+      font: 600 16px/1.4 var(--body);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+    }
+    #cam-last {
+      margin-top: 4px;
+      font: 14px/1.4 var(--mono);
+      min-height: 1.4em;
+    }
+    .cam-bottom {
+      position: absolute;
+      inset: auto 0 0;
+      padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 16px;
+    }
+    .cam-bottom button:not(#cam-shutter) {
+      background: rgba(0, 0, 0, .55);
+      color: #fff;
+      border-color: rgba(255, 255, 255, .4);
+    }
+    #cam-auto { justify-self: start; }
+    #cam-done { justify-self: end; }
+    #cam-shutter {
+      width: 72px;
+      height: 72px;
+      padding: 0;
+      border-radius: 50%;
+      background: #fff;
+      border: 5px solid rgba(255, 255, 255, .45);
+      background-clip: padding-box;
+    }
+    #cam-shutter:active { transform: scale(.94); }
+
     .controls {
       display: flex;
       flex-wrap: wrap;
@@ -638,12 +729,16 @@ Squirtle 63/102 HP</textarea>
     <div class="controls">
       <button class="primary" id="go">Look up values</button>
       <button id="copy" disabled>Copy as CSV</button>
+      <button id="scan" type="button">Add from photos</button>
+      <button id="cam-open" type="button" hidden>Scan with camera</button>
+      <input id="scan-file" type="file" accept="image/*" multiple hidden>
       <span class="hint">
         Formats:
         <code>Charizard 4/102</code>,
         <code>Charizard 4/102 LP</code>,
         <code>2x Gengar 94/165 MP</code>,
-        <code>Mew TG12/TG30</code>
+        <code>Mew TG12/TG30</code>.
+        Or add cards from photos (pick several at once) or scan them with your camera.
       </span>
     </div>
   </section>
@@ -682,6 +777,22 @@ Squirtle 63/102 HP</textarea>
     so they’re still here after a refresh.
   </footer>
 </main>
+
+<!-- Camera scan mode: live viewfinder that captures a card when it holds still -->
+<div class="cam" id="cam" role="dialog" aria-modal="true" aria-label="Scan cards with the camera" hidden>
+  <video id="cam-video" playsinline muted autoplay></video>
+  <div class="cam-guide" id="cam-guide"></div>
+  <div class="cam-flash" id="cam-flash"></div>
+  <div class="cam-top">
+    <div id="cam-msg">Hold a card inside the frame</div>
+    <div id="cam-last" aria-live="polite"></div>
+  </div>
+  <div class="cam-bottom">
+    <button id="cam-auto" type="button" aria-pressed="true">Auto: on</button>
+    <button id="cam-shutter" type="button" aria-label="Capture now"></button>
+    <button id="cam-done" type="button">Done</button>
+  </div>
+</div>
 
 <script>
 /* =====================================================================
@@ -1523,6 +1634,429 @@ document.addEventListener("input", (e) => {
 });
 
 $("cards").addEventListener("input", () => store.set(STORAGE_KEYS.list, $("cards").value));
+/* =====================================================================
+   Adding cards from photos (POST /scan reads them with Workers AI)
+   ===================================================================== */
+
+const SCAN_MAX_SIDE = 1280;   // px; enough to read the collector number
+const SCAN_PASSCODE_KEY = "bvc-scan-passcode";
+let scanPasscode = store.get(SCAN_PASSCODE_KEY, "");   // remembered even if storage is blocked
+
+// Shrink a photo and return it as a JPEG data URL.
+async function photoToDataURL(file) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = Math.min(1, SCAN_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+async function scanPhoto(file) {
+  const image = await photoToDataURL(file);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await fetch("/scan", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image, passcode: scanPasscode }),
+    });
+    if (res.status === 401 && attempt === 0) {
+      const entered = prompt("Passcode for adding cards from photos:");
+      if (!entered) throw new Error("No passcode entered");
+      scanPasscode = entered.trim();
+      store.set(SCAN_PASSCODE_KEY, scanPasscode);
+      continue;
+    }
+    if (!res.ok) throw new Error((await res.text()) || `Scan failed (${res.status})`);
+    return (await res.json()).cards || [];
+  }
+  throw new Error("Wrong passcode");
+}
+
+// "Charizard 4/102", or "Charizard 4" when there's no set total.
+function cardLine(c) {
+  const number = c.total ? `${c.number}/${c.total}` : c.number;
+  return [c.name, number].filter(Boolean).join(" ");
+}
+
+function addLines(lines) {
+  const box = $("cards");
+  const current = box.value.replace(/\s+$/, "");
+  box.value = (current ? current + "\n" : "") + lines.join("\n");
+  store.set(STORAGE_KEYS.list, box.value);
+}
+
+const PARALLEL_SCANS = 3;
+
+async function scanFiles(files) {
+  files = files.filter((f) => f.type.startsWith("image/") || /\.(heic|heif)$/i.test(f.name));
+  if (!files.length) return;
+
+  const queue = files;
+  const outcomes = [];   // per photo, in the order picked: { cards } or { error }
+  let next = 0;          // next photo to start
+  let flushed = 0;       // photos already written to the list
+  let added = 0;
+  const problems = [];
+  const button = $("scan");
+  button.disabled = true;
+
+  const showProgress = () => {
+    const done = outcomes.filter(Boolean).length;
+    $("status").textContent = `Reading photos: ${done} of ${queue.length} done, ${added} card${added === 1 ? "" : "s"} added…`;
+  };
+
+  // Write finished photos to the list in the order they were picked,
+  // even though they finish out of order.
+  const flush = () => {
+    while (outcomes[flushed]) {
+      const { cards, error } = outcomes[flushed];
+      const name = queue[flushed].name || `photo ${flushed + 1}`;
+      if (error) problems.push(`${name}: ${error}`);
+      else if (!cards.length) problems.push(`${name}: no cards found`);
+      else {
+        addLines(cards.map(cardLine));
+        added += cards.length;
+      }
+      flushed++;
+    }
+  };
+
+  async function worker() {
+    while (next < queue.length) {
+      const i = next++;
+      try {
+        outcomes[i] = { cards: await scanPhoto(queue[i]) };
+      } catch (err) {
+        outcomes[i] = { error: err.message };
+      }
+      flush();
+      showProgress();
+    }
+  }
+
+  showProgress();
+  await Promise.all(Array.from({ length: PARALLEL_SCANS }, worker));
+
+  button.disabled = false;
+  const parts = [`Added ${added} card${added === 1 ? "" : "s"} from ${queue.length} photo${queue.length === 1 ? "" : "s"}. Check them, then press “Look up values”.`];
+  if (problems.length) parts.push(`Problems: ${problems.join("; ")}`);
+  $("status").textContent = parts.join(" ");
+}
+
+$("scan").addEventListener("click", () => $("scan-file").click());
+$("scan-file").addEventListener("change", (e) => {
+  const files = [...e.target.files];
+  e.target.value = "";   // so picking the same photo again still fires
+  scanFiles(files);
+});
+
+/* =====================================================================
+   Camera scan mode
+   A live viewfinder. Every few frames we compare a small grayscale copy of
+   the area inside the card outline with the previous one. When it has held
+   still for a moment and looks different from the last capture, we grab one
+   full-size frame and send just that to /scan. Comparing frames happens in
+   the browser and costs nothing; only captures use the daily allowance.
+   ===================================================================== */
+
+// Differences are measured on a tiny, blurred grayscale copy of the outline
+// area, normalized for brightness and contrast so auto-exposure doesn't count
+// as motion. In testing, the same card in a shaky hand stayed under ~10, and two
+// different cards with the same layout were 17+ apart.
+const CAM = {
+  sampleEveryMs: 100,
+  sampleW: 20, sampleH: 28,   // card-shaped sample (small = forgiving of hand shake)
+  movingAbove: 11,            // change between samples that counts as motion
+  spikesAllowed: 1,           // ignore this many motion samples in a row (a twitch, a refocus)
+  steadyForMs: 600,           // hold roughly still this long to auto-capture
+  newCardAbove: 13,           // must differ this much from the last capture
+  minGapMs: 1000,             // never capture faster than this
+  captureMaxSide: 1280,
+  cropMargin: 0.06,           // grab a little outside the outline
+};
+
+const cam = {
+  session: 0,
+  stream: null,
+  timer: null,
+  auto: true,
+  prev: null,
+  steadySince: null,
+  spikes: 0,
+  held: null,          // running sum of calm frames in the current hold
+ 
+  lastShot: null,
+  lastShotAt: 0,
+  audio: null,
+  // results, written to the list in capture order
+  outcomes: [],
+  flushed: 0,
+  started: 0,
+  added: 0,
+  empty: 0,
+  failed: 0,
+};
+
+const sampleCanvas = document.createElement("canvas");
+sampleCanvas.width = CAM.sampleW;
+sampleCanvas.height = CAM.sampleH;
+const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+
+// Where the on-screen card outline falls in the video's own pixels.
+// The video is shown with object-fit: cover, so undo that scaling.
+function guideRectInVideo(margin = 0) {
+  const video = $("cam-video");
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const box = video.getBoundingClientRect();
+  const guide = $("cam-guide").getBoundingClientRect();
+  const scale = Math.max(box.width / vw, box.height / vh);
+  const offX = (box.width - vw * scale) / 2;
+  const offY = (box.height - vh * scale) / 2;
+  const mx = guide.width * margin, my = guide.height * margin;
+  let x = (guide.left - mx - box.left - offX) / scale;
+  let y = (guide.top - my - box.top - offY) / scale;
+  let w = (guide.width + 2 * mx) / scale;
+  let h = (guide.height + 2 * my) / scale;
+  x = Math.max(0, x); y = Math.max(0, y);
+  w = Math.min(vw - x, w); h = Math.min(vh - y, h);
+  return { x, y, w, h };
+}
+
+function sampleGray() {
+  const r = guideRectInVideo();
+  sampleCtx.drawImage($("cam-video"), r.x, r.y, r.w, r.h, 0, 0, CAM.sampleW, CAM.sampleH);
+  const px = sampleCtx.getImageData(0, 0, CAM.sampleW, CAM.sampleH).data;
+  const gray = new Float32Array(CAM.sampleW * CAM.sampleH);
+  let mean = 0;
+  for (let i = 0; i < gray.length; i++) {
+    gray[i] = px[i * 4] * 0.3 + px[i * 4 + 1] * 0.59 + px[i * 4 + 2] * 0.11;
+    mean += gray[i];
+  }
+  mean /= gray.length;
+  let variance = 0;
+  for (let i = 0; i < gray.length; i++) {
+    gray[i] -= mean;
+    variance += gray[i] * gray[i];
+  }
+  // Scale to a fixed contrast so exposure changes don't look like motion.
+  const k = 50 / (Math.sqrt(variance / gray.length) || 1);
+  for (let i = 0; i < gray.length; i++) gray[i] *= k;
+  return gray;
+}
+
+function meanDiff(a, b) {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += Math.abs(a[i] - b[i]);
+  return sum / a.length;
+}
+
+function camTick() {
+  const video = $("cam-video");
+  if (!video.videoWidth || document.hidden) return;
+
+  const gray = sampleGray();
+  const now = performance.now();
+  const motion = cam.prev ? meanDiff(gray, cam.prev) : 255;
+  const spike = motion > CAM.movingAbove;
+
+  if (spike) {
+    // A twitch or refocus: skip this frame and keep comparing against the last
+    // calm one. Only sustained motion restarts the hold.
+    cam.spikes++;
+    if (cam.spikes > CAM.spikesAllowed) {
+      cam.prev = gray;
+      cam.steadySince = null;
+      cam.held = null;
+    }
+  } else {
+    cam.spikes = 0;
+    cam.prev = gray;
+    if (cam.steadySince == null) {
+      cam.steadySince = now;
+      cam.held = { sum: new Float32Array(gray.length), count: 0 };
+    }
+    // Average the calm frames of this hold; shake mostly cancels out.
+    for (let i = 0; i < gray.length; i++) cam.held.sum[i] += gray[i];
+    cam.held.count++;
+  }
+
+  const heldFrame = cam.held?.count ? cam.held.sum.map((v) => v / cam.held.count) : null;
+  const isNew = !!heldFrame && (!cam.lastShot || meanDiff(heldFrame, cam.lastShot) > CAM.newCardAbove);
+  const heldMs = cam.steadySince == null ? 0 : now - cam.steadySince;
+  const ready = cam.auto && isNew;
+
+  // Fill the bar under the outline as the hold progresses.
+  const guide = $("cam-guide");
+  guide.classList.toggle("steady", ready);
+  guide.style.setProperty("--hold", ready ? Math.min(1, heldMs / CAM.steadyForMs) : 0);
+
+  if (ready && !spike && heldMs >= CAM.steadyForMs && now - cam.lastShotAt >= CAM.minGapMs) camCapture(heldFrame);
+}
+
+function camFeedback() {
+  const flash = $("cam-flash");
+  flash.classList.add("on");
+  requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.remove("on")));
+  const guide = $("cam-guide");
+  guide.classList.add("shot");
+  setTimeout(() => guide.classList.remove("shot"), 500);
+  navigator.vibrate?.(40);
+  try {
+    const ctx = cam.audio;
+    if (ctx) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+    }
+  } catch {}
+}
+
+function camStatus() {
+  const reading = cam.started - cam.outcomes.filter(Boolean).length;
+  const parts = [`${cam.added} card${cam.added === 1 ? "" : "s"} added`];
+  if (reading) parts.push(`${reading} reading`);
+  if (cam.empty) parts.push(`${cam.empty} no card`);
+  if (cam.failed) parts.push(`${cam.failed} failed`);
+  $("cam-msg").textContent = parts.join(" · ");
+}
+
+function camFlush() {
+  while (cam.outcomes[cam.flushed]) {
+    const { cards, error } = cam.outcomes[cam.flushed];
+    if (error) {
+      cam.failed++;
+      $("cam-last").textContent = `✕ ${error.slice(0, 120)}`;
+    } else if (!cards.length) {
+      cam.empty++;
+      $("cam-last").textContent = "No card found, try again";
+    } else {
+      const lines = cards.map(cardLine);
+      addLines(lines);
+      cam.added += lines.length;
+      $("cam-last").textContent = `✓ ${lines.join(", ")}`;
+    }
+    cam.flushed++;
+  }
+  camStatus();
+  if (!$("cam").hidden) return;
+  // Camera already closed: report on the page once everything is in.
+  if (cam.flushed === cam.started) camSummary();
+}
+
+function camSummary() {
+  const parts = [`Added ${cam.added} card${cam.added === 1 ? "" : "s"} with the camera. Check them, then press “Look up values”.`];
+  if (cam.empty) parts.push(`${cam.empty} capture${cam.empty === 1 ? "" : "s"} had no card.`);
+  if (cam.failed) parts.push(`${cam.failed} failed.`);
+  $("status").textContent = parts.join(" ");
+}
+
+async function camCapture(gray = null) {
+  const video = $("cam-video");
+  if (!video.videoWidth) return;
+  cam.lastShot = gray || sampleGray();
+  cam.lastShotAt = performance.now();
+  cam.steadySince = null;
+  cam.held = null;
+  $("cam-guide").style.setProperty("--hold", 0);
+  camFeedback();
+
+  // Crop to the outline (plus a margin) at full resolution.
+  const r = guideRectInVideo(CAM.cropMargin);
+  const scale = Math.min(1, CAM.captureMaxSide / Math.max(r.w, r.h));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(r.w * scale);
+  canvas.height = Math.round(r.h * scale);
+  canvas.getContext("2d").drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
+
+  const session = cam.session;
+  const i = cam.started++;
+  camStatus();
+  let outcome;
+  try {
+    const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.9));
+    const file = new File([blob], `camera-${i + 1}.jpg`, { type: "image/jpeg" });
+    outcome = { cards: await scanPhoto(file) };
+  } catch (err) {
+    outcome = { error: err.message };
+  }
+  // The camera was closed and reopened while this was reading: just add it.
+  if (session !== cam.session) {
+    if (outcome.cards?.length) addLines(outcome.cards.map(cardLine));
+    return;
+  }
+  cam.outcomes[i] = outcome;
+  camFlush();
+}
+
+async function camOpen() {
+  try {
+    cam.audio ||= new (window.AudioContext || window.webkitAudioContext)();
+    cam.audio.resume?.();
+  } catch {}
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+    });
+  } catch (err) {
+    const why = err.name === "NotAllowedError"
+      ? "Camera permission was denied. Allow it in your browser's site settings and try again."
+      : `Couldn't open the camera (${err.name || err.message}).`;
+    $("status").textContent = why;
+    return;
+  }
+
+  Object.assign(cam, {
+    session: cam.session + 1,
+    stream, prev: null, steadySince: null, spikes: 0, held: null, lastShot: null, lastShotAt: 0,
+    outcomes: [], flushed: 0, started: 0, added: 0, empty: 0, failed: 0,
+  });
+  $("cam-video").srcObject = stream;
+  $("cam").hidden = false;
+  document.body.style.overflow = "hidden";
+  $("cam-msg").textContent = "Hold a card inside the frame";
+  $("cam-last").textContent = cam.auto ? "It captures when the card holds still" : "Tap the button to capture";
+  cam.timer = setInterval(camTick, CAM.sampleEveryMs);
+  $("cam-shutter").focus();
+}
+
+function camClose() {
+  clearInterval(cam.timer);
+  cam.timer = null;
+  cam.stream?.getTracks().forEach((t) => t.stop());
+  cam.stream = null;
+  $("cam-video").srcObject = null;
+  $("cam").hidden = true;
+  document.body.style.overflow = "";
+  if (cam.flushed === cam.started) camSummary();
+  else $("status").textContent = `Reading ${cam.started - cam.flushed} more camera capture(s)…`;
+  $("cam-open").focus();
+}
+
+if (navigator.mediaDevices?.getUserMedia) $("cam-open").hidden = false;
+$("cam-open").addEventListener("click", camOpen);
+$("cam-done").addEventListener("click", camClose);
+$("cam-shutter").addEventListener("click", () => camCapture());
+$("cam-auto").addEventListener("click", () => {
+  cam.auto = !cam.auto;
+  $("cam-auto").textContent = `Auto: ${cam.auto ? "on" : "off"}`;
+  $("cam-auto").setAttribute("aria-pressed", String(cam.auto));
+  $("cam-guide").classList.remove("steady");
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("cam").hidden) camClose();
+});
+
 $("go").addEventListener("click", lookUpAll);
 $("copy").addEventListener("click", copyCSV);
 
