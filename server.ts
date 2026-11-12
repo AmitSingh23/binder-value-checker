@@ -3,8 +3,6 @@ import express from 'express';
 const app = express();
 app.use(express.json());
 
-await using view = new Bun.WebView();
-
 // The page is served from this same server, so its requests to /price are
 // same-origin and need no CORS. Open http://localhost:3000 rather than the file.
 app.get('/', (_req, res) => {
