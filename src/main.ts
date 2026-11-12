@@ -10,9 +10,9 @@
 //   lookup.ts       the "Look up values" button
 //   csv.ts          the "Copy as CSV" button
 //   scan.ts         "Add from photos" via our /scan function
-//   camera.ts       "Scan with camera"
+//   camera/         "Scan with camera": viewfinder.ts (the screen), hold-detector.ts (when to capture)
 
-import { initCamera } from "./camera";
+import { initCamera } from "./camera/viewfinder";
 import { copyCSV } from "./csv";
 import { ui } from "./dom";
 import { lookUpAll } from "./lookup";

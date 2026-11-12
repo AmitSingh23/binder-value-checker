@@ -1,14 +1,15 @@
-// Camera scan mode.
+// Camera scan mode: the full-screen viewfinder.
 //
-// A live viewfinder. Every few frames we compare a small grayscale copy of
-// the area inside the card outline with the previous one. When it has held
-// still for a moment and looks different from the last capture, we grab one
-// full-size frame and send just that to /scan. Comparing frames happens in
-// the browser and costs nothing; only captures use the daily allowance.
+// Every few frames we sample the area inside the card outline and hand it to
+// the HoldDetector (hold-detector.ts), which says when a new card has held
+// still. Then we grab one full-size frame and send just that to /scan.
+// Sampling happens in the browser and costs nothing; only captures use the
+// daily allowance.
 
-import { setStatus, ui } from "./dom";
-import { addLines, cardLine, readCards, type ScanOutcome } from "./scan";
-import { context2d, InOrder, plural } from "./util";
+import { setStatus, ui } from "../dom";
+import { addLines, cardLine, readCards, type ScanOutcome } from "../scan";
+import { context2d, InOrder, plural } from "../util";
+import { HOLD, HoldDetector, toGray, type Gray } from "./hold-detector";
 
 declare global {
   interface Window {
@@ -16,40 +17,11 @@ declare global {
   }
 }
 
-// Differences are measured on a tiny, blurred grayscale copy of the outline
-// area, normalized for brightness and contrast so auto-exposure doesn't count
-// as motion. In testing, the same card in a shaky hand stayed under ~10, and two
-// different cards with the same layout were 17+ apart.
-const CAM = {
-  sampleEveryMs: 100,
-  sampleW: 20, // card-shaped sample (small = forgiving of hand shake)
-  sampleH: 28,
-  movingAbove: 11, // change between samples that counts as motion
-  spikesAllowed: 1, // ignore this many motion samples in a row (a twitch, a refocus)
-  steadyForMs: 600, // hold roughly still this long to auto-capture
-  newCardAbove: 13, // must differ this much from the last capture
-  minGapMs: 1000, // never capture faster than this
-  captureMaxSide: 1280,
-  cropMargin: 0.06, // grab a little outside the outline
-};
+const SAMPLE_EVERY_MS = 100;
+const CAPTURE_MAX_SIDE = 1280; // px; enough to read the collector number
+const CROP_MARGIN = 0.06; // grab a little outside the outline
 
 const el = ui.camera;
-
-/* =====================================================================
-   State
-   ===================================================================== */
-
-type Gray = Float32Array;
-
-/** Motion tracking between samples. */
-interface Motion {
-  prev: Gray | null; // last calm sample
-  spikes: number; // motion samples in a row
-  steadySince: number | null; // when the current hold started
-  held: { sum: Gray; count: number } | null; // running sum of calm samples in the current hold
-  lastShot: Gray | null; // what the last capture looked like
-  lastShotAt: number;
-}
 
 /** Captures since the camera was opened. */
 interface Tally {
@@ -60,34 +32,26 @@ interface Tally {
   failed: number;
 }
 
-const newMotion = (): Motion => ({
-  prev: null, spikes: 0, steadySince: null, held: null, lastShot: null, lastShotAt: 0,
-});
 const newTally = (): Tally => ({
   results: new InOrder(showCaptureResult), started: 0, added: 0, empty: 0, failed: 0,
 });
 
-let motion = newMotion();
+let detector = new HoldDetector();
 let tally = newTally();
 let stream: MediaStream | null = null;
 let timer: number | undefined;
-let auto = true;
+let autoCapture = true;
 let audio: AudioContext | null = null;
 
 const isOpen = () => !el.root.hidden;
 
 /* =====================================================================
-   Sampling the viewfinder
+   Reading the video
    ===================================================================== */
-
-const sampleCanvas = document.createElement("canvas");
-sampleCanvas.width = CAM.sampleW;
-sampleCanvas.height = CAM.sampleH;
-const sampleCtx = context2d(sampleCanvas, { willReadFrequently: true });
 
 // Where the on-screen card outline falls in the video's own pixels.
 // The video is shown with object-fit: cover, so undo that scaling.
-function guideRectInVideo(margin = 0) {
+function outlineInVideo(margin = 0) {
   const { videoWidth: vw, videoHeight: vh } = el.video;
   const box = el.video.getBoundingClientRect();
   const guide = el.guide.getBoundingClientRect();
@@ -104,81 +68,40 @@ function guideRectInVideo(margin = 0) {
   return { x, y, w, h };
 }
 
-/** A small grayscale copy of the outline area, scaled to a fixed contrast. */
-function sampleGray(): Gray {
-  const r = guideRectInVideo();
-  sampleCtx.drawImage(el.video, r.x, r.y, r.w, r.h, 0, 0, CAM.sampleW, CAM.sampleH);
-  const px = sampleCtx.getImageData(0, 0, CAM.sampleW, CAM.sampleH).data;
-  const gray = new Float32Array(CAM.sampleW * CAM.sampleH);
+const sampleCanvas = document.createElement("canvas");
+sampleCanvas.width = HOLD.sampleW;
+sampleCanvas.height = HOLD.sampleH;
+const sampleCtx = context2d(sampleCanvas, { willReadFrequently: true });
 
-  let mean = 0;
-  for (let i = 0; i < gray.length; i++) {
-    gray[i] = px[i * 4]! * 0.3 + px[i * 4 + 1]! * 0.59 + px[i * 4 + 2]! * 0.11;
-    mean += gray[i]!;
-  }
-  mean /= gray.length;
-
-  let variance = 0;
-  for (let i = 0; i < gray.length; i++) {
-    gray[i]! -= mean;
-    variance += gray[i]! * gray[i]!;
-  }
-
-  // Scale to a fixed contrast so exposure changes don't look like motion.
-  const k = 50 / (Math.sqrt(variance / gray.length) || 1);
-  for (let i = 0; i < gray.length; i++) gray[i]! *= k;
-  return gray;
+/** A tiny copy of the outline area, for the detector. */
+function sample(): Gray {
+  const r = outlineInVideo();
+  sampleCtx.drawImage(el.video, r.x, r.y, r.w, r.h, 0, 0, HOLD.sampleW, HOLD.sampleH);
+  return toGray(sampleCtx.getImageData(0, 0, HOLD.sampleW, HOLD.sampleH).data);
 }
 
-function meanDiff(a: Gray, b: Gray): number {
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) sum += Math.abs(a[i]! - b[i]!);
-  return sum / a.length;
+/** The outline area (plus a margin) at full resolution, as a JPEG. */
+function cropFrame(): Promise<Blob | null> {
+  const r = outlineInVideo(CROP_MARGIN);
+  const scale = Math.min(1, CAPTURE_MAX_SIDE / Math.max(r.w, r.h));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(r.w * scale);
+  canvas.height = Math.round(r.h * scale);
+  context2d(canvas).drawImage(el.video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
 }
 
-/** Runs every few frames: track motion, and capture once a new card has held still. */
+/** Runs every SAMPLE_EVERY_MS while the camera is open. */
 function tick() {
   if (!el.video.videoWidth || document.hidden) return;
 
-  const gray = sampleGray();
-  const now = performance.now();
-  const spike = (motion.prev ? meanDiff(gray, motion.prev) : 255) > CAM.movingAbove;
-
-  if (spike) {
-    // A twitch or refocus: skip this frame and keep comparing against the last
-    // calm one. Only sustained motion restarts the hold.
-    motion.spikes++;
-    if (motion.spikes > CAM.spikesAllowed) {
-      motion.prev = gray;
-      motion.steadySince = null;
-      motion.held = null;
-    }
-  } else {
-    motion.spikes = 0;
-    motion.prev = gray;
-    if (motion.steadySince == null) {
-      motion.steadySince = now;
-      motion.held = { sum: new Float32Array(gray.length), count: 0 };
-    }
-    // Average the calm frames of this hold; shake mostly cancels out.
-    const held = motion.held!;
-    for (let i = 0; i < gray.length; i++) held.sum[i]! += gray[i]!;
-    held.count++;
-  }
-
-  const held = motion.held;
-  const heldFrame = held?.count ? held.sum.map((v) => v / held.count) : null;
-  const isNew = !!heldFrame && (!motion.lastShot || meanDiff(heldFrame, motion.lastShot) > CAM.newCardAbove);
-  const heldMs = motion.steadySince == null ? 0 : now - motion.steadySince;
-  const ready = auto && isNew;
+  const hold = detector.update(sample(), performance.now(), autoCapture);
 
   // Fill the bar under the outline as the hold progresses.
-  el.guide.classList.toggle("steady", ready);
-  el.guide.style.setProperty("--hold", String(ready ? Math.min(1, heldMs / CAM.steadyForMs) : 0));
+  el.guide.classList.toggle("steady", hold.steady);
+  el.guide.style.setProperty("--hold", String(hold.progress));
 
-  if (ready && !spike && heldMs >= CAM.steadyForMs && now - motion.lastShotAt >= CAM.minGapMs) {
-    capture(heldFrame);
-  }
+  if (hold.capture) capture(hold.capture);
 }
 
 /* =====================================================================
@@ -206,33 +129,19 @@ function captureFeedback() {
   } catch {}
 }
 
-/** Crop the outline (plus a margin) out of the video at full resolution. */
-function cropFrame(): HTMLCanvasElement {
-  const r = guideRectInVideo(CAM.cropMargin);
-  const scale = Math.min(1, CAM.captureMaxSide / Math.max(r.w, r.h));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(r.w * scale);
-  canvas.height = Math.round(r.h * scale);
-  context2d(canvas).drawImage(el.video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
-  return canvas;
-}
-
-/** Capture now and read the card. `gray` is what the hold looked like, if known. */
-async function capture(gray: Gray | null = null) {
+/** Capture now and read the card. `held` is what the detector saw, if it asked for this capture. */
+async function capture(held: Gray | null = null) {
   if (!el.video.videoWidth) return;
-  motion.lastShot = gray ?? sampleGray();
-  motion.lastShotAt = performance.now();
-  motion.steadySince = null;
-  motion.held = null;
+  detector.captured(held ?? sample(), performance.now());
   el.guide.style.setProperty("--hold", "0");
   captureFeedback();
 
-  const canvas = cropFrame();
+  const photo = cropFrame();
   const thisTally = tally;
   const i = thisTally.started++;
   showCameraStatus();
 
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+  const blob = await photo;
   const outcome: ScanOutcome = blob ? await readCards(blob) : { error: "Couldn't capture the frame" };
 
   // The camera was closed and reopened while this was reading: just add it.
@@ -306,14 +215,14 @@ async function open() {
     return;
   }
 
-  motion = newMotion();
+  detector = new HoldDetector();
   tally = newTally();
   el.video.srcObject = stream;
   el.root.hidden = false;
   document.body.style.overflow = "hidden";
   el.message.textContent = "Hold a card inside the frame";
-  el.lastCapture.textContent = auto ? "It captures when the card holds still" : "Tap the button to capture";
-  timer = window.setInterval(tick, CAM.sampleEveryMs);
+  el.lastCapture.textContent = autoCapture ? "It captures when the card holds still" : "Tap the button to capture";
+  timer = window.setInterval(tick, SAMPLE_EVERY_MS);
   el.shutter.focus();
 }
 
@@ -333,9 +242,9 @@ function close() {
 }
 
 function toggleAuto() {
-  auto = !auto;
-  el.autoButton.textContent = `Auto: ${auto ? "on" : "off"}`;
-  el.autoButton.setAttribute("aria-pressed", String(auto));
+  autoCapture = !autoCapture;
+  el.autoButton.textContent = `Auto: ${autoCapture ? "on" : "off"}`;
+  el.autoButton.setAttribute("aria-pressed", String(autoCapture));
   el.guide.classList.remove("steady");
 }
 
