@@ -1,23 +1,10 @@
-# pkmn
+# Binder Value Check
 
-To install dependencies:
+A static page (`public/index.html`) plus one Cloudflare Pages Function
+(`functions/price.ts`, served at `/price`) that looks up TCGplayer market prices.
 
 ```bash
 bun install
+bun run dev      # local preview at http://localhost:8788
+bun run deploy   # deploy to Cloudflare Pages (run from this folder)
 ```
-
-To run:
-
-```bash
-bun run 
-```
-
-To type check:
-
-```bash
-bun check
-```
-
-Run `bun fmt` to format the code.
-
-This project was created using `bun init` in bun v1.4.4. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
