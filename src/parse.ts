@@ -9,6 +9,10 @@ import type { ParsedLine } from "./types";
 const TRAILING_CONDITION =
   /[\s,;|(\[–-]+\(?\[?\s*(near mint|lightly played|light played|moderately played|heavily played|heavy played|damaged|played|mint|poor|nm|lp|mp|hp|dmg|dm)\s*\)?\]?$/i;
 
+// A printed set code anywhere in the line: "set:SVI", "set: MEW".
+// Spelled out so it can't be mistaken for a condition or part of the name.
+const SET_CODE = /(?:^|\s)set:\s*([A-Za-z0-9-]+)(?=\s|$)/i;
+
 // A quantity at the start: "2x Gengar", "3 x Gengar".
 const LEADING_QTY = /^(\d+)\s*x\s+/i;
 
@@ -27,6 +31,7 @@ const NAME_AND_NUMBER = /^(.+?)[\s,;|#–-]+#?([A-Za-z]*\d+[A-Za-z]*)\s*(?:\/\s*
  *   "Charizard, 004/102 x2 (MP)"
  *   "Mew TG12/TG30"
  *   "Charizard 4 near mint"
+ *   "Pikachu ex 238/191 set:SSP LP"
  */
 export function parseLine(raw: string): ParsedLine | null {
   let line = raw.trim();
@@ -34,6 +39,13 @@ export function parseLine(raw: string): ParsedLine | null {
 
   let qty = 1;
   let cond: Condition = "NM";
+  let set: string | null = null;
+
+  const setMatch = SET_CODE.exec(line);
+  if (setMatch) {
+    set = setMatch[1]!.toUpperCase();
+    line = (line.slice(0, setMatch.index) + " " + line.slice(setMatch.index + setMatch[0].length)).trim();
+  }
 
   const lead = LEADING_QTY.exec(line);
   if (lead) {
@@ -60,7 +72,7 @@ export function parseLine(raw: string): ParsedLine | null {
   const m = NAME_AND_NUMBER.exec(line);
   if (!m) return { raw, qty, cond, error: "Couldn’t find a card number. Use “Name 12/99”." };
 
-  return { raw, qty, cond, name: m[1]!.trim(), number: m[2]!, total: m[3] ?? null };
+  return { raw, qty, cond, name: m[1]!.trim(), number: m[2]!, total: m[3] ?? null, set };
 }
 
 /** Normalise card numbers so they compare equal: "054" -> "54", "TG07" -> "TG7", "sv49" -> "SV49". */

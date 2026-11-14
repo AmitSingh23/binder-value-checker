@@ -57,16 +57,29 @@ export async function readCards(photo: Blob): Promise<ScanOutcome> {
   }
 }
 
-/** "Charizard 4/102", or "Charizard 4" when there's no set total. */
+/** "Pikachu ex 238/191 set:SSP"; the total and set code only when the card showed them. */
 export function cardLine(c: ScannedCard): string {
   const number = c.total ? `${c.number}/${c.total}` : c.number;
-  return [c.name, number].filter(Boolean).join(" ");
+  const set = c.set ? `set:${c.set}` : "";
+  return [c.name, number, set].filter(Boolean).join(" ");
 }
 
 /** Appends lines to the end of the list. */
 export function addLines(lines: string[]) {
   const current = ui.cardsInput.value.replace(/\s+$/, "");
   ui.cardsInput.value = (current ? current + "\n" : "") + lines.join("\n");
+  saveList();
+}
+
+/** Takes lines back off the list: for each, the last line that matches it exactly. */
+export function removeLines(lines: string[]) {
+  if (!lines.length) return;
+  const current = ui.cardsInput.value.split("\n");
+  for (const line of lines) {
+    const i = current.lastIndexOf(line);
+    if (i >= 0) current.splice(i, 1);
+  }
+  ui.cardsInput.value = current.join("\n");
   saveList();
 }
 

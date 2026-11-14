@@ -18,7 +18,7 @@ import {
 import type { Card, FoundResult, NotFoundResult, PendingResult } from "./types";
 import { esc, money } from "./util";
 
-const COLUMNS = 9;
+const COLUMNS = 8;
 
 /* =====================================================================
    Rows
@@ -51,8 +51,7 @@ function foundRow(r: FoundResult, i: number): string {
       <td data-label="Condition">${conditionSelect(r, i)}</td>
       <td data-label="Listings">${listingsLink(r, card)}</td>
       <td class="num" data-label="Qty">${r.entry.qty}</td>
-      <td class="num" data-label="TCGplayer (USD)" id="price-${i}">${priceCell(r, { showLiveTag: false })}</td>
-      <td class="num" data-label="Lowest price" id="lowest-${i}">${priceCell(r, { showLiveTag: true })}</td>
+      <td class="num" data-label="TCGplayer (USD)" id="price-${i}">${priceCell(r)}</td>
       <td class="num" data-label="Your price">${yourPriceInput(r, i, card)}</td>
       <td class="num" data-label="Total (USD)" id="total-${i}">${totalCell(r)}</td>
     </tr>`;
@@ -122,13 +121,13 @@ const UPDATING_TAG = `<span class="updating"><span class="ring" aria-hidden="tru
 
 // Main price (live from TCGplayer once it arrives), its printing, and
 // TCGdex's prices for the other printings.
-function priceCell(r: FoundResult, { showLiveTag }: { showLiveTag: boolean }): string {
+function priceCell(r: FoundResult): string {
   const info = priceInfo(chosenCard(r));
   const cond = r.entry.cond;
   const loading = isLivePriceLoading(info.productId, cond);
   const isLive = livePrice(info.productId, cond) != null;
 
-  const status = loading ? UPDATING_TAG : showLiveTag && isLive ? "live" : null;
+  const status = loading ? UPDATING_TAG : isLive ? "live" : null;
   const label = [info.variant ? esc(info.variant) : null, status].filter(Boolean).join(" · ");
   const mainLabel = label ? `<div class="variants">${label}</div>` : "";
   const others = info.others.map((o) => `<div class="variants">${esc(o.label)} ${money(o.usd)}</div>`).join("");
@@ -192,8 +191,7 @@ const setCell = (id: string, html: string) => {
 function showLivePrice(productId: number, cond: Condition) {
   state.results.forEach((r, i) => {
     if (!isFound(r) || r.entry.cond !== cond || priceInfo(chosenCard(r)).productId !== productId) return;
-    setCell(`price-${i}`, priceCell(r, { showLiveTag: false }));
-    setCell(`lowest-${i}`, priceCell(r, { showLiveTag: true }));
+    setCell(`price-${i}`, priceCell(r));
     setCell(`total-${i}`, totalCell(r));
   });
   updateSummary();

@@ -29,6 +29,12 @@ function isPocketCard(card: Card): boolean {
   return /pocket/i.test(card.set?.serie?.name ?? "") || /^[AB]\d/.test(card.set?.id ?? "");
 }
 
+/** A set from TCGdex's /sets/{id}. Only the fields we use. */
+interface TcgdexSet {
+  id: string;
+  abbreviation?: { official?: string }; // printed set code, e.g. "SVI"
+}
+
 export interface CardSearch {
   matches: Card[];
   note?: string; // a warning to show with the matches
@@ -52,16 +58,37 @@ export async function findCard(entry: Entry): Promise<CardSearch> {
   const details = (await Promise.all(hits.slice(0, 12).map((c) => getJSON<Card>(`${TCGDEX_API}/cards/${c.id}`))))
     .filter((card) => !isPocketCard(card));
 
-  // 5. If a set size was given ("/102"), use it to pick the right set.
-  if (entry.total && /^\d+$/.test(entry.total)) {
-    const setSize = Number(entry.total);
-    const bySetSize = details.filter((card) => card.set?.cardCount?.official === setSize);
-    if (bySetSize.length) return { matches: bySetSize };
-    return {
-      matches: details,
-      note: `No set with ${setSize} cards had this number; showing closest matches.`,
-    };
+  let matches = details;
+  const notes: string[] = [];
+
+  // 5. If a set code was given ("set:SVI"), it names the set exactly.
+  if (entry.set) {
+    const bySetCode = await withSetCode(matches, entry.set);
+    if (bySetCode.length) matches = bySetCode;
+    else notes.push(`No set with code ${entry.set} had this card.`);
   }
 
-  return { matches: details };
+  // 6. If a set size was given ("/102"), use it to pick the right set.
+  if (entry.total && /^\d+$/.test(entry.total)) {
+    const setSize = Number(entry.total);
+    const bySetSize = matches.filter((card) => card.set?.cardCount?.official === setSize);
+    if (bySetSize.length) matches = bySetSize;
+    else notes.push(`No set with ${setSize} cards had this number.`);
+  }
+
+  if (notes.length && matches.length) notes.push("Showing closest matches.");
+  return { matches, note: notes.join(" ") || undefined };
+}
+
+/** The cards whose set has this printed code ("SVI", "MEW"). */
+async function withSetCode(cards: Card[], code: string): Promise<Card[]> {
+  const wanted = code.toUpperCase();
+  const setIds = [...new Set(cards.map((c) => c.set?.id).filter((id) => id != null))];
+  const sets = await Promise.all(
+    setIds.map((id) => getJSON<TcgdexSet>(`${TCGDEX_API}/sets/${encodeURIComponent(id)}`).catch(() => null)),
+  );
+  const matching = new Set(
+    sets.filter((s) => s?.abbreviation?.official?.toUpperCase() === wanted).map((s) => s!.id),
+  );
+  return cards.filter((c) => c.set?.id != null && matching.has(c.set.id));
 }

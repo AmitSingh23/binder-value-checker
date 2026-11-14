@@ -1,7 +1,7 @@
 // Cloudflare Pages Function: POST /scan reads Pokémon cards in a photo.
 //
 // Body: { image: "data:image/jpeg;base64,..." , passcode?: string }
-// Reply: { cards: [{ name, number, total }] }
+// Reply: { cards: [{ name, number, total, set }] }
 //
 // Uses Workers AI (free daily allowance). Needs a Workers AI binding named
 // AI on the Pages project (Settings > Bindings). If a SCAN_PASSCODE
@@ -9,7 +9,9 @@
 
 import type { ScanReply, ScannedCard } from "../shared/api";
 
-const MODEL = "@cf/mistralai/mistral-small-3.1-24b-instruct";
+// Vision model that reads the cards. Override per project with a SCAN_MODEL
+// variable, e.g. "@cf/mistralai/mistral-small-3.1-24b-instruct" (the previous one).
+const DEFAULT_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
 
 // ~1.5 MB of base64 is plenty for a 1280px JPEG; reject anything bigger.
 const MAX_IMAGE_CHARS = 1_500_000;
@@ -19,14 +21,40 @@ For every card you can see, read:
 - name: the card name printed at the top, exactly as printed, including suffixes like "ex", "EX", "GX", "V", "VMAX", "VSTAR" (e.g. "Charizard ex", "Umbreon VMAX").
 - number: the collector number printed in a bottom corner, before the slash (e.g. "4" in "4/102", "TG12" in "TG12/TG30", "SV49" in "SV49/SV94"). Copy it exactly as printed, including letters and leading zeros.
 - total: the number after the slash (e.g. "102"), or "" if there is no slash.
+- set: the set code printed in small capitals in a bottom corner, near the collector number, usually followed by a language code (e.g. "SVI" in "SVI EN 198/198", "MEW" in "MEW EN 151/165"). Leave out the language code ("EN") and the single-letter regulation mark ("G", "H"). Older cards have only a set symbol, not a code: use "".
 If you cannot read a value, use "".
 Reply with JSON only, no other text, in exactly this shape:
-{"cards":[{"name":"...","number":"...","total":"..."}]}
+{"cards":[{"name":"...","number":"...","total":"...","set":"..."}]}
 If there are no Pokémon cards in the photo, reply {"cards":[]}.`;
+
+// Workers AI JSON mode: the reply must match this schema (the shape PROMPT asks for).
+const JSON_MODE = {
+  type: "json_schema",
+  json_schema: {
+    type: "object",
+    properties: {
+      cards: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            number: { type: "string" },
+            total: { type: "string" },
+            set: { type: "string" },
+          },
+          required: ["name", "number", "total", "set"],
+        },
+      },
+    },
+    required: ["cards"],
+  },
+};
 
 interface Env {
   AI: { run(model: string, input: unknown): Promise<unknown> };
   SCAN_PASSCODE?: string;
+  SCAN_MODEL?: string;
 }
 
 const text = (body: string, status: number) => new Response(body, { status });
@@ -50,7 +78,7 @@ function parseCards(reply: unknown): ScannedCard[] | null {
   const list = (data as { cards?: unknown })?.cards;
   if (!Array.isArray(list)) return null;
   return list
-    .map((c) => ({ name: str(c?.name), number: str(c?.number), total: str(c?.total) }))
+    .map((c) => ({ name: str(c?.name), number: str(c?.number), total: str(c?.total), set: str(c?.set).toUpperCase() }))
     .filter((c) => c.name || c.number);
 }
 
@@ -73,21 +101,27 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: E
   }
   if (image.length > MAX_IMAGE_CHARS) return text("Image too large", 413);
 
+  const model = env.SCAN_MODEL || DEFAULT_MODEL;
+  const input = {
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: PROMPT },
+          { type: "image_url", image_url: { url: image } },
+        ],
+      },
+    ],
+    max_tokens: 600,
+    temperature: 0,
+  };
+
   let result: unknown;
   try {
-    result = await env.AI.run(MODEL, {
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: PROMPT },
-            { type: "image_url", image_url: { url: image } },
-          ],
-        },
-      ],
-      max_tokens: 600,
-      temperature: 0,
-    });
+    // JSON mode makes the model reply in exactly the shape above. Not every
+    // model supports it, and it can fail with "JSON Mode couldn't be met",
+    // so on any error try once more without it.
+    result = await env.AI.run(model, { ...input, response_format: JSON_MODE }).catch(() => env.AI.run(model, input));
   } catch (err) {
     // Includes running out of the free daily allowance.
     return text(`Card reader failed: ${err instanceof Error ? err.message : String(err)}`, 502);

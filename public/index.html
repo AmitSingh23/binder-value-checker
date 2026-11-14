@@ -65,8 +65,29 @@
 
   <div id="loading-bar" class="loading-bar" aria-hidden="true"></div>
 
-  <section class="input-panel">
-    <label class="cap" for="cards">Your cards</label>
+  <section class="panel input-panel">
+    <div class="panel-head">
+      <label class="cap" for="cards">Your cards</label>
+      <div class="add-buttons">
+        <button id="cam-open" type="button" hidden>
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 8h3l1.5-2.5h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1Z"/>
+            <circle cx="12" cy="13.5" r="3.5"/>
+          </svg>
+          Scan with camera
+        </button>
+        <button id="scan" type="button">
+          <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3" y="5" width="18" height="14" rx="2"/>
+            <circle cx="8.5" cy="10" r="1.5"/>
+            <path d="m4 17 5-5 4 4 2.5-2.5L20 18"/>
+          </svg>
+          Add from photos
+        </button>
+        <input id="scan-file" type="file" accept="image/*" multiple hidden>
+      </div>
+    </div>
+
     <textarea id="cards" spellcheck="false" autocapitalize="off" autocorrect="off">Charizard 4/102 MP
 Pikachu ex 238/191
 Umbreon VMAX 215/203 LP
@@ -75,16 +96,13 @@ Squirtle 63/102 HP</textarea>
 
     <div class="controls">
       <button class="primary" id="go">Look up values</button>
-      <button id="copy" disabled>Copy as CSV</button>
-      <button id="scan" type="button">Add from photos</button>
-      <button id="cam-open" type="button" hidden>Scan with camera</button>
-      <input id="scan-file" type="file" accept="image/*" multiple hidden>
       <span class="hint">
         Formats:
-        <code>Charizard 4/102</code>,
-        <code>Charizard 4/102 LP</code>,
-        <code>2x Gengar 94/165 MP</code>,
-        <code>Mew TG12/TG30</code>.
+        <code>Charizard 4/102</code>
+        <code>Charizard 4/102 LP</code>
+        <code>2x Gengar 94/165 MP</code>
+        <code>Mew TG12/TG30</code>
+        <code>Pikachu ex 238/191 set:SSP</code>
         Or add cards from photos (pick several at once) or scan them with your camera.
       </span>
     </div>
@@ -94,6 +112,7 @@ Squirtle 63/102 HP</textarea>
     <div class="total"><span class="cap">Total</span><b id="t-usd">—</b></div>
     <div class="total"><span class="cap">Cards</span><b id="t-count">—</b></div>
     <div class="status" id="status">Press “Look up values” to price the list.</div>
+    <button id="copy" disabled>Copy as CSV</button>
   </section>
 
   <div class="table-wrap">
@@ -105,7 +124,7 @@ Squirtle 63/102 HP</textarea>
           <th>Condition</th>
           <th>Listings</th>
           <th class="num">Qty</th>
-          <th class="num">TCGplayer NM (USD)</th>
+          <th class="num">TCGplayer (USD)</th>
           <th class="num">Your price</th>
           <th class="num">Total (USD)</th>
         </tr>
@@ -128,16 +147,41 @@ Squirtle 63/102 HP</textarea>
 <!-- Camera scan mode: live viewfinder that captures a card when it holds still -->
 <div class="cam" id="cam" role="dialog" aria-modal="true" aria-label="Scan cards with the camera" hidden>
   <video id="cam-video" playsinline muted autoplay></video>
-  <div class="cam-guide" id="cam-guide"></div>
-  <div class="cam-flash" id="cam-flash"></div>
+
   <div class="cam-top">
-    <div id="cam-msg">Hold a card inside the frame</div>
-    <div id="cam-last" aria-live="polite"></div>
+    <div class="cam-status" id="cam-msg" aria-live="polite"></div>
+    <button class="cam-pill" id="cam-torch" type="button" aria-pressed="false" hidden>
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M8 3h8v4l-2 3v10a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1V10L8 7Z"/>
+        <path d="M8 7h8"/>
+      </svg>
+      Light
+    </button>
   </div>
+
+  <div class="cam-stage">
+    <!-- The card outline. data-phase and the ring's fill are set by camera/viewfinder.ts. -->
+    <div class="cam-guide" id="cam-guide" data-phase="empty">
+      <svg viewBox="0 0 126 176" aria-hidden="true">
+        <rect class="cam-outline" x="2" y="2" width="122" height="172" rx="7"/>
+        <path class="cam-corners" d="M2 24V9a7 7 0 0 1 7-7h15 M102 2h15a7 7 0 0 1 7 7v15 M124 152v15a7 7 0 0 1-7 7h-15 M24 174H9a7 7 0 0 1-7-7v-15"/>
+        <rect class="cam-ring" id="cam-ring" x="2" y="2" width="122" height="172" rx="7" pathLength="1"/>
+      </svg>
+    </div>
+    <div class="cam-hint" id="cam-hint"></div>
+  </div>
+
+  <div class="cam-flash" id="cam-flash"></div>
+
   <div class="cam-bottom">
-    <button id="cam-auto" type="button" aria-pressed="true">Auto: on</button>
-    <button id="cam-shutter" type="button" aria-label="Capture now"></button>
-    <button id="cam-done" type="button">Done</button>
+    <ol class="cam-tray" id="cam-tray" aria-label="Captures, newest first"></ol>
+    <div class="cam-controls">
+      <button class="cam-pill" id="cam-auto" type="button" role="switch" aria-checked="true">
+        <i aria-hidden="true"></i>Auto
+      </button>
+      <button id="cam-shutter" type="button" aria-label="Capture now"></button>
+      <button class="cam-pill" id="cam-done" type="button">Done</button>
+    </div>
   </div>
 </div>
 </body>

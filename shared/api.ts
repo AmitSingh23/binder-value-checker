@@ -20,6 +20,7 @@ export interface ScannedCard {
   name: string;
   number: string; // "4" in "4/102"
   total: string; // "102" in "4/102", or ""
+  set: string; // printed set code, e.g. "SVI" in "SVI EN 198/198", or "" (older cards have none)
 }
 export interface ScanReply {
   cards: ScannedCard[];

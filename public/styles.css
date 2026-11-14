@@ -2,8 +2,8 @@
  * Styles for index.html.
  *
  * Layout: one working column.
- *   1. The card list (textarea) and buttons
- *   2. Totals
+ *   1. The card list (textarea) and buttons, in a panel
+ *   2. Totals bar (sticks to the top while you scroll the table)
  *   3. Priced table (turns into stacked cards on phones)
  * Plus a full-screen camera view for scanning cards.
  */
@@ -26,6 +26,8 @@
   --bad:        #c0392b;
   --title-a:    #e8890c;
   --title-b:    #e2483d;
+  --inset:      #f6f7fa;   /* fields and wells inside a panel */
+  --shadow:     0 1px 2px rgb(27 32 48 / .06), 0 8px 24px -12px rgb(27 32 48 / .18);
 
   --display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
   --body:    "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -49,6 +51,8 @@
     --bad:        #ef7466;
     --title-a:    #ffd23f;
     --title-b:    #ff7a45;
+    --inset:      #141821;
+    --shadow:     0 1px 2px rgb(0 0 0 / .3), 0 10px 28px -14px rgb(0 0 0 / .7);
     color-scheme: dark;
   }
 }
@@ -66,6 +70,8 @@
   --bad:        #ef7466;
   --title-a:    #ffd23f;
   --title-b:    #ff7a45;
+  --inset:      #141821;
+  --shadow:     0 1px 2px rgb(0 0 0 / .3), 0 10px 28px -14px rgb(0 0 0 / .7);
   color-scheme: dark;
 }
 
@@ -75,6 +81,9 @@
 
 * { box-sizing: border-box; }
 
+/* Rules below give buttons and panels a display of their own; hidden still wins. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -83,14 +92,14 @@ body {
   /* Respect the iPhone notch / home-bar areas. */
   padding-left:  max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: max(32px, env(safe-area-inset-top, 0px)) 64px;
+  padding-block: max(28px, env(safe-area-inset-top, 0px)) 64px;
 }
 
 main {
   max-width: 1080px;
   margin: 0 auto;
   display: grid;
-  gap: 24px;
+  gap: 20px;
 }
 
 h1 {
@@ -106,13 +115,7 @@ h1 span {
   color: transparent;
 }
 
-/* Header layout */
-header {
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  padding: 24px 28px 20px;
-}
+header { padding: 4px 4px 0; }
 
 .logo-row {
   display: flex;
@@ -212,12 +215,28 @@ header:hover .logo-spark { animation: twinkle .9s ease-in-out; transform-origin:
   color: var(--muted);
 }
 
-.hint      { color: var(--muted); font-size: .9rem; }
-.hint code { font-family: var(--mono); font-size: .85em; }
+.hint { color: var(--muted); font-size: .9rem; }
+.hint code {
+  font-family: var(--mono);
+  font-size: .82em;
+  white-space: nowrap;
+  background: var(--inset);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 6px;
+}
 
 a { color: var(--link); }
 
-footer { color: var(--muted); font-size: .85rem; }
+footer { color: var(--muted); font-size: .85rem; padding-inline: 4px; }
+
+/* A raised box: the input panel, the totals bar, the table */
+.panel, .totals, .table-wrap {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
 
 /* ================================================================
    Input panel
@@ -225,45 +244,89 @@ footer { color: var(--muted); font-size: .85rem; }
 
 .input-panel {
   display: grid;
-  gap: 12px;
+  gap: 14px;
+  padding: 16px;
+}
+
+.panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+.add-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 textarea {
   width: 100%;
-  min-height: 180px;
+  min-height: 190px;
   resize: vertical;
   font: 16px/1.6 var(--mono);
   color: var(--fg);
-  background: var(--surface);
+  background: var(--inset);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 10px;
   padding: 12px 14px;
 }
 
 .controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px 16px;
+  gap: 12px 18px;
   align-items: center;
+}
+.controls .hint {
+  flex: 1 1 320px;
+  line-height: 1.9;
 }
 
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   font: 600 15px/1 var(--body);
-  border-radius: 6px;
-  padding: 12px 18px;
+  border-radius: 10px;
+  padding: 11px 16px;
   cursor: pointer;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--fg);
+  transition: background-color .15s, border-color .15s, transform .1s;
 }
+button:hover:not(:disabled)  { border-color: color-mix(in srgb, var(--fg) 35%, var(--line)); }
+button:active:not(:disabled) { transform: translateY(1px); }
 button.primary {
   background: var(--accent);
   color: var(--accent-ink);
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 80%, #000);
+  padding: 13px 22px;
+  font-size: 16px;
+  box-shadow: 0 1px 0 rgb(255 255 255 / .35) inset, 0 6px 14px -8px color-mix(in srgb, var(--accent) 80%, #000);
+}
+button.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, #fff);
+  border-color: color-mix(in srgb, var(--accent) 70%, #000);
 }
 button:disabled {
-  opacity: .55;
-  cursor: progress;
+  opacity: .5;
+  cursor: default;
+}
+
+/* Line icons inside buttons */
+.icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 select {
@@ -272,8 +335,8 @@ select {
   color: var(--fg);
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 4px;
+  border-radius: 8px;
+  padding: 5px 6px;
 }
 
 textarea:focus-visible,
@@ -289,11 +352,15 @@ a:focus-visible {
    ================================================================ */
 
 .totals {
+  position: sticky;
+  top: max(8px, env(safe-area-inset-top, 0px));
+  z-index: 50;
   display: flex;
   flex-wrap: wrap;
-  gap: 12px 40px;
-  padding: 16px 0;
-  border-block: 2px solid var(--fg);
+  align-items: center;
+  gap: 10px 32px;
+  padding: 14px 16px 14px 20px;
+  border-left: 5px solid var(--accent);
 }
 
 .total { display: grid; gap: 4px; }
@@ -303,21 +370,18 @@ a:focus-visible {
 }
 
 .status {
+  flex: 1 1 260px;
   color: var(--muted);
   font-size: .92rem;
-  align-self: end;
 }
 
 /* ================================================================
    Results table
    ================================================================ */
 
-.table-wrap {
-  overflow-x: auto;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
+.table-wrap { overflow-x: auto; }
+/* Nothing looked up yet: no empty table. */
+.table-wrap:has(tbody:empty) { display: none; }
 
 table {
   width: 100%;
@@ -326,18 +390,20 @@ table {
 
 th, td {
   text-align: left;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
 }
 th {
-  font: 600 .74rem/1.2 var(--body);
+  font: 600 .72rem/1.2 var(--body);
   text-transform: uppercase;
   letter-spacing: .08em;
   color: var(--muted);
-  background: var(--bg);
+  background: var(--inset);
+  white-space: nowrap;
 }
 tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 
 /* Money and quantity columns */
 td.num, th.num {
@@ -351,16 +417,17 @@ td.num b { font-weight: 500; }
 /* Card cell: thumbnail + name + set line */
 .card {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-start;
   min-width: 0;
 }
 .card img {
-  width: 44px;
+  width: 48px;
   flex: none;
-  border-radius: 3px;
+  border-radius: 4px;
   background: var(--line);
   aspect-ratio: 245 / 342;   /* real card proportions */
+  box-shadow: 0 2px 6px rgb(0 0 0 / .25);
 }
 .card .nm  { font-weight: 600; }
 .card .sub { color: var(--muted); font-size: .86rem; }
@@ -368,7 +435,7 @@ td.num b { font-weight: 500; }
 /* The line exactly as the user typed it */
 .input-line {
   font-family: var(--mono);
-  font-size: .82rem;
+  font-size: .8rem;
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -385,18 +452,19 @@ td.num b { font-weight: 500; }
 /* Match status badges */
 .pill {
   display: inline-block;
-  font: 600 .72rem/1 var(--body);
+  font: 600 .7rem/1 var(--body);
   letter-spacing: .04em;
   text-transform: uppercase;
-  padding: 4px 7px;
+  padding: 5px 8px;
   border-radius: 999px;
-  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  white-space: nowrap;
 }
 .pill.ok   { color: var(--good); }
 .pill.warn { color: var(--warn); }
 .pill.bad  { color: var(--bad); }
 
-td select.printing { margin-top: 6px; font-size: 14px; }
+td select.printing { display: block; margin-top: 6px; font-size: 14px; }
 select.cond        { font-family: var(--mono); font-weight: 500; }
 
 /* "LP on TCGplayer ↗" button-style link */
@@ -408,9 +476,9 @@ a.listings {
   font: 600 .88rem/1 var(--body);
   text-decoration: none;
   color: var(--link);
-  background: var(--bg);
+  background: var(--inset);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 10px;
 }
 a.listings:hover { border-color: var(--link); }
@@ -419,8 +487,9 @@ a.listings:hover { border-color: var(--link); }
 .override {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   font-family: var(--mono);
+  color: var(--muted);
 }
 .override input {
   width: 6.5em;
@@ -429,9 +498,9 @@ a.listings:hover { border-color: var(--link); }
   text-align: right;
   padding: 6px 8px;
   color: var(--fg);
-  background: var(--bg);
+  background: var(--inset);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 8px;
 }
 .override input:focus-visible {
   outline: 3px solid var(--accent);
@@ -456,13 +525,25 @@ a.listings:hover { border-color: var(--link); }
 
 /* Desktop: keep the table wide enough; it scrolls sideways if needed. */
 @media (min-width: 761px) {
-  table { min-width: 980px; }
+  table { min-width: 940px; }
+  td:first-child { min-width: 260px; }
 }
 
 /* Phones: each table row becomes a stacked two-column card. */
 @media (max-width: 760px) {
   h1      { font-size: 1.7rem; }
-  .total b { font-size: 1.6rem; }
+  .total b { font-size: 1.5rem; }
+
+  /* The two "add" buttons share one row. */
+  .add-buttons        { width: 100%; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
+  .add-buttons button { font-size: 14px; padding: 10px 6px; gap: 6px; }
+  .add-buttons .icon  { width: 16px; height: 16px; }
+  button.primary      { width: 100%; }
+
+  /* Totals: the numbers and the button on one row, the status line under them. */
+  .totals  { gap: 8px 24px; padding: 12px 12px 12px 14px; }
+  .status  { order: 1; flex-basis: 100%; font-size: .85rem; }
+  #copy    { margin-left: auto; padding: 9px 12px; }
 
   thead { display: none; }
   table, tbody { display: block; }
@@ -470,10 +551,11 @@ a.listings:hover { border-color: var(--link); }
   tbody tr {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px 16px;
+    gap: 10px 16px;
     padding: 14px;
     border-bottom: 1px solid var(--line);
   }
+  tbody tr:hover td { background: none; }
   tbody tr:last-child { border-bottom: 0; }
 
   td {
@@ -572,91 +654,280 @@ td b.stale {
 
 /* ================================================================
    Camera scan mode (always dark: it sits over a live camera feed)
+
+   Three rows over the video: the tally, the card outline with its hint,
+   and the tray of captures above the buttons.
    ================================================================ */
 .cam:not([hidden]) {
+  --cam-good: #4ade80;
+  --cam-bad:  #fb923c;
   position: fixed;
   inset: 0;
   z-index: 200;
-  display: block;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   background: #000;
   color: #fff;
+  font-family: var(--body);
   overscroll-behavior: contain;
+  -webkit-user-select: none;
+  user-select: none;
 }
 .cam video {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-.cam-guide {
-  position: absolute;
-  left: 50%;
-  top: 46%;
-  transform: translate(-50%, -50%);
-  width: min(74vw, calc(60vh * 63 / 88));
-  aspect-ratio: 63 / 88;
-  border: 3px solid rgba(255, 255, 255, .85);
-  border-radius: 4.5% / 3.2%;
-  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, .4);
-  transition: border-color .15s;
+.cam button:hover:not(:disabled) { border-color: rgb(255 255 255 / .6); }
+
+/* Buttons and labels that float over the video */
+.cam-pill, .cam-status, .cam-hint, .shot {
+  background: rgb(12 14 20 / .62);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgb(255 255 255 / .16);
+  color: #fff;
 }
-.cam-guide.steady { border-color: var(--accent); }
-/* Hold progress: fills along the bottom edge, capture when full */
-.cam-guide::after {
-  content: "";
-  position: absolute;
-  left: 8%;
-  bottom: -16px;
-  height: 6px;
-  width: calc(84% * var(--hold, 0));
-  border-radius: 3px;
+.cam-pill {
+  border-radius: 999px;
+  padding: 11px 16px;
+  min-height: 44px;
+}
+.cam-pill[aria-pressed="true"] {
   background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
 }
-.cam-guide.shot   { border-color: #4ade80; }
+
+/* ---- Top: the tally ---- */
+.cam-top {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) max(14px, env(safe-area-inset-right, 0px)) 8px
+           max(14px, env(safe-area-inset-left, 0px));
+}
+.cam-status {
+  font: 600 14px/1.3 var(--body);
+  border-radius: 999px;
+  padding: 9px 14px;
+}
+
+/* ---- Middle: the card outline ---- */
+.cam-stage {
+  position: relative;
+  z-index: 1;
+  container-type: size;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 6px 0;
+  min-height: 0;
+}
+.cam-guide {
+  --ink: rgb(255 255 255 / .9);
+  position: relative;
+  flex: none;
+  aspect-ratio: 63 / 88;   /* a real card */
+  height: min(74vw * 88 / 63, 54vh);                   /* browsers without container units */
+  height: min(74cqw * 88 / 63, 100cqh - 62px);         /* fill the stage, leaving room for the hint */
+  border-radius: 5.6% / 4%;
+  /* Dims everything outside the outline. */
+  box-shadow: 0 0 0 100vmax rgb(0 0 0 / .5);
+}
+.cam-guide svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke-linecap: round;
+}
+.cam-outline { stroke: rgb(255 255 255 / .28); stroke-width: 1; }
+.cam-corners { stroke: var(--ink); stroke-width: 2.6; transition: stroke .15s; }
+/* Hold progress: runs around the outline, capture when it closes */
+.cam-ring {
+  stroke: var(--accent);
+  stroke-width: 2.6;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;   /* 1 = empty, 0 = all the way round */
+  opacity: 0;
+  transition: stroke-dashoffset .1s linear, opacity .15s;
+}
+
+.cam-guide[data-phase="empty"]    { --ink: rgb(255 255 255 / .6); }
+.cam-guide[data-phase="holding"],
+.cam-guide[data-phase="focusing"] { --ink: var(--accent); }
+.cam-guide[data-phase="holding"]  .cam-ring,
+.cam-guide[data-phase="focusing"] .cam-ring { opacity: 1; }
+.cam-guide[data-phase="captured"] { --ink: var(--cam-good); }
+.cam-guide[data-phase="captured"] .cam-outline { stroke: var(--cam-good); stroke-width: 2; }
+.cam-guide[data-phase="rejected"] { --ink: var(--cam-bad); }
+
+.cam-hint {
+  position: relative;   /* above the outline's dimming shadow */
+  max-width: calc(100% - 32px);
+  font: 600 15px/1.3 var(--body);
+  text-align: center;
+  border-radius: 999px;
+  padding: 9px 16px;
+}
+.cam-hint:empty { visibility: hidden; }
+
 .cam-flash {
   position: absolute;
   inset: 0;
+  z-index: 3;
   background: #fff;
   opacity: 0;
   pointer-events: none;
   transition: opacity .3s;
 }
 .cam-flash.on { opacity: .6; transition: none; }
-.cam-top {
-  position: absolute;
-  inset: 0 0 auto;
-  padding: calc(14px + env(safe-area-inset-top)) 16px 14px;
-  text-align: center;
-  font: 600 16px/1.4 var(--body);
-  text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
-}
-#cam-last {
-  margin-top: 4px;
-  font: 14px/1.4 var(--mono);
-  min-height: 1.4em;
-}
+
+/* ---- Bottom: the tray of captures, then the buttons ---- */
 .cam-bottom {
-  position: absolute;
-  inset: auto 0 0;
-  padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 12px;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(transparent, rgb(0 0 0 / .55) 45%);
+}
+
+.cam-tray {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 2px max(14px, env(safe-area-inset-right, 0px)) 2px max(14px, env(safe-area-inset-left, 0px));
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-height: 60px;   /* so the outline doesn't jump when the first capture lands */
+}
+.cam-tray::-webkit-scrollbar { display: none; }
+
+.shot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(78vw, 300px);
+  padding: 5px 6px 5px 5px;
+  border-radius: 12px;
+  border-left: 3px solid rgb(255 255 255 / .35);
+  animation: shot-in .25s ease-out;
+}
+@keyframes shot-in {
+  from { opacity: 0; transform: translateY(10px) scale(.96); }
+}
+.shot[data-state="added"]  { border-left-color: var(--cam-good); }
+.shot[data-state="empty"],
+.shot[data-state="failed"] { border-left-color: var(--cam-bad); }
+
+.shot-picture {
+  flex: none;
+  width: 32px;
+  aspect-ratio: 63 / 88;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgb(255 255 255 / .12);
+}
+.shot-picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.shot-text {
+  min-width: 0;
+  font: 500 13px/1.3 var(--mono);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.shot[data-state="reading"] .shot-text { color: rgb(255 255 255 / .7); animation: stale-pulse 1.4s ease-in-out infinite; }
+.shot[data-state="empty"]   .shot-text,
+.shot[data-state="failed"]  .shot-text { color: var(--cam-bad); }
+
+.shot-remove {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(255 255 255 / .1);
+  color: #fff;
+}
+.shot-remove svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.cam-controls {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 16px;
-}
-.cam-bottom button:not(#cam-shutter) {
-  background: rgba(0, 0, 0, .55);
-  color: #fff;
-  border-color: rgba(255, 255, 255, .4);
+  padding-inline: max(18px, env(safe-area-inset-left, 0px)) max(18px, env(safe-area-inset-right, 0px));
 }
 #cam-auto { justify-self: start; }
-#cam-done { justify-self: end; }
+#cam-done { justify-self: end; min-width: 84px; }
+
+/* Auto on/off: a switch */
+#cam-auto i {
+  position: relative;
+  width: 30px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / .25);
+  transition: background-color .15s;
+}
+#cam-auto i::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .15s;
+}
+#cam-auto[aria-checked="true"] i        { background: var(--accent); }
+#cam-auto[aria-checked="true"] i::after { transform: translateX(12px); }
+
 #cam-shutter {
   width: 72px;
   height: 72px;
   padding: 0;
   border-radius: 50%;
   background: #fff;
-  border: 5px solid rgba(255, 255, 255, .45);
+  border: 5px solid rgb(255 255 255 / .45);
   background-clip: padding-box;
 }
 #cam-shutter:active { transform: scale(.94); }
+
+.cam button:focus-visible { outline-color: #fff; }
+
+@media (prefers-reduced-motion: reduce) {
+  .shot { animation: none; }
+  .shot[data-state="reading"] .shot-text { animation: none; }
+  .cam-ring { transition: none; }
+}

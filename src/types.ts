@@ -14,6 +14,7 @@ export interface Entry extends Line {
   name: string;
   number: string; // "4", "TG12", "SV49"
   total: string | null; // set size after the slash, if given
+  set?: string | null; // printed set code from "set:SVI", if given (missing in older saves)
 }
 
 export type ParsedLine = Entry | (Line & { error: string });
